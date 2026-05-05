@@ -22,6 +22,7 @@ class Mesh;
 class Field;
 
 struct InitialMeshData {
+    std::vector<unsigned> elID;
     std::vector<unsigned> elLevel;
     std::vector<unsigned> elType;
     std::vector<std::vector<unsigned>> elTplgy;
@@ -147,7 +148,7 @@ public:
     void initializeField_Ball(std::vector<double> xc, double r);
     void initMarkers();
     void advectField(const std::vector<std::vector<double>>& vel, const int it, const double dt);
-    CellMarkersData getCellMarkers();
+    CellMarkersData getCellMarkers(const InitialMeshData& mesh_data);
     std::vector<double> interpolatePsiOnOriginalNodes() const;
     void interpolatePsiOnNodes(const std::vector<std::vector<double>>& node_coords, std::vector<double>& psi) const;
     void reinit();

@@ -459,7 +459,7 @@ void Ex35::interpolatePsiOnNodes(const std::vector<std::vector<double>>& node_co
 
 }
 
-CellMarkersData Ex35::getCellMarkers() {
+CellMarkersData Ex35::getCellMarkers(const InitialMeshData & mesh_data) {
 
   const std::size_t nMarkers = _markers[0].size();
   for (unsigned d = 1; d < _dim; ++d) {
@@ -506,55 +506,55 @@ CellMarkersData Ex35::getCellMarkers() {
       throw std::runtime_error("Ex35::getCellMarkers: invalid origElem in _thisToOrigElem");
     }
 
-    data.own[origElem].push_back(static_cast<unsigned>(im));
+    data.own[mesh_data.elID[origElem]].push_back(static_cast<unsigned>(im));
   }
 
   // --------------------------------------------------
   // 2) combined markers = own + cut neighbours
   // --------------------------------------------------
-  data.combined = data.own;
+  // data.combined = data.own;
 
-  const auto& neighAll = _meshvel[_matchedLevel].neighbors();
+  // const auto& neighAll = _meshvel[_matchedLevel].neighbors();
 
-  if (neighAll.size() != _meshvel[_matchedLevel].numElements()) {
-    throw std::runtime_error("Ex35::getCellMarkers: neighbors not built on matched level");
-  }
+  // if (neighAll.size() != _meshvel[_matchedLevel].numElements()) {
+  //   throw std::runtime_error("Ex35::getCellMarkers: neighbors not built on matched level");
+  // }
 
-  for (const auto& kv : data.own) {
-    const unsigned origElem = kv.first;
+  // for (const auto& kv : data.own) {
+  //   const unsigned origElem = kv.first;
 
-    if (origElem >= _origToThisElem.size() || _origToThisElem[origElem] == INVALID_ID) {
-      throw std::runtime_error("Ex35::getCellMarkers: invalid _origToThisElem map");
-    }
+  //   if (origElem >= _origToThisElem.size() || _origToThisElem[origElem] == INVALID_ID) {
+  //     throw std::runtime_error("Ex35::getCellMarkers: invalid _origToThisElem map");
+  //   }
 
-    const unsigned thisElem = _origToThisElem[origElem];
+  //   const unsigned thisElem = _origToThisElem[origElem];
 
-    if (thisElem >= neighAll.size()) {
-      throw std::runtime_error("Ex35::getCellMarkers: thisElem out of neighbours range");
-    }
+  //   if (thisElem >= neighAll.size()) {
+  //     throw std::runtime_error("Ex35::getCellMarkers: thisElem out of neighbours range");
+  //   }
 
-    auto& markersComb = data.combined[origElem];
+  //   auto& markersComb = data.combined[origElem];
 
-    for (unsigned ineigh = 0; ineigh < neighAll[thisElem].size(); ++ineigh) {
-      const unsigned thisNeigh = neighAll[thisElem][ineigh];
+  //   for (unsigned ineigh = 0; ineigh < neighAll[thisElem].size(); ++ineigh) {
+  //     const unsigned thisNeigh = neighAll[thisElem][ineigh];
 
-      if (thisNeigh == INVALID_ID) continue;
-      if (thisNeigh >= _thisToOrigElem.size()) continue;
-      if (_thisToOrigElem[thisNeigh] == INVALID_ID) continue;
+  //     if (thisNeigh == INVALID_ID) continue;
+  //     if (thisNeigh >= _thisToOrigElem.size()) continue;
+  //     if (_thisToOrigElem[thisNeigh] == INVALID_ID) continue;
 
-      const unsigned origNeigh = _thisToOrigElem[thisNeigh];
+  //     const unsigned origNeigh = _thisToOrigElem[thisNeigh];
 
-      // add only neighbours that are cut
-      auto itCutNeigh = data.own.find(origNeigh);
-      if (itCutNeigh == data.own.end()) continue;
+  //     // add only neighbours that are cut
+  //     auto itCutNeigh = data.own.find(origNeigh);
+  //     if (itCutNeigh == data.own.end()) continue;
 
-      const auto& neighMarkers = itCutNeigh->second;
-      markersComb.insert(markersComb.end(), neighMarkers.begin(), neighMarkers.end());
-    }
+  //     const auto& neighMarkers = itCutNeigh->second;
+  //     markersComb.insert(markersComb.end(), neighMarkers.begin(), neighMarkers.end());
+  //   }
 
-    std::sort(markersComb.begin(), markersComb.end());
-    markersComb.erase(std::unique(markersComb.begin(), markersComb.end()), markersComb.end());
-  }
+  //   std::sort(markersComb.begin(), markersComb.end());
+  //   markersComb.erase(std::unique(markersComb.begin(), markersComb.end()), markersComb.end());
+  // }
 
   return data;
 }

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_map>
+#include<chrono>
 
 #include "Mollifier.hpp"
 
@@ -69,6 +70,7 @@ class Ex35 {
 private:
     int _levelS;
     int _levelN;
+    int _levelDelta;
     int _dim;
     unsigned _neighMode;
     std::string _filename;
@@ -140,10 +142,11 @@ private:
 
 public:
     explicit Ex35(int levelS, int levelN);
+    void printHeader();
     void initializeVELMesh(const InitialMeshData& mesh_data);
     void initializeLSMesh();
     InitialMeshData buildSeed1x2() const;
-    InitialMeshData buildSeed5x10() const;
+    InitialMeshData buildSeed1x1x2() const;
     void buildMapsToOriginalMesh(const InitialMeshData& mesh_data, const unsigned level);
     void initializeField_Ball(std::vector<double> xc, double r);
     void initMarkers();

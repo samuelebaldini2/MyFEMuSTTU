@@ -117,26 +117,32 @@ Ex35::Ex35(int levelS, int levelN)
 
 }
 
-void Ex35::initializeVELMesh(const InitialMeshData& mesh_data) {
+void Ex35::printHeader() {
   const char* C_RST = "\033[0m";
   const char* C_BLD = "\033[1m";
   const char* C_CYN = "\033[36m";
   const char* C_YEL = "\033[33m";
   const char* C_GRN = "\033[32m";
 
-  auto print_reinit_header = [&]() {
-    std::cout << "\n"
+  std::cout << "\n"
               << C_BLD << C_CYN
               << " --------------------------------------------------- \n"
               << "         AMR Level-set\n"
               << " --------------------------------------------------- "
               << C_RST << std::endl;
-      
-  };
-  print_reinit_header();
 
-  InitialMeshData seed = buildSeed1x2();
-  // InitialMeshData seed = buildSeed5x10();
+  return;
+}
+
+void Ex35::initializeVELMesh(const InitialMeshData& mesh_data) {
+
+  auto t_start = std::chrono::high_resolution_clock::now();
+
+  InitialMeshData seed;
+  if (mesh_data.X.size() == 2 && mesh_data.elType[0] == 3)
+    seed = buildSeed1x2();
+  else if (mesh_data.X.size() == 3 && mesh_data.elType[0] == 0)
+    seed = buildSeed1x1x2();
 
   _elLevelvel[0] = seed.elLevel;
   _elTypevel[0]  = seed.elType;
@@ -195,12 +201,25 @@ void Ex35::initializeVELMesh(const InitialMeshData& mesh_data) {
   _fieldvel[_levelS].addField("V", Field::Location::Nodal, 0.);
   _fieldvel[_levelS].addField("W", Field::Location::Nodal, 0.);
 
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::initializeVELMesh time = "
+            << elapsed << " s" << std::endl;
+
 }
 
 void Ex35::initializeLSMesh() {
 
-  InitialMeshData seed = buildSeed1x2();
-  // InitialMeshData seed = buildSeed5x10();
+  auto t_start = std::chrono::high_resolution_clock::now();
+
+  InitialMeshData seed;
+  if (_dim == 2 && _elTypevel[0][0] == 3)
+    seed = buildSeed1x2();
+  else if (_dim == 3 && _elTypevel[0][0] == 0)
+    seed = buildSeed1x1x2();
 
   _elLevel0[0] = seed.elLevel;
   _elType0[0]  = seed.elType;
@@ -217,12 +236,21 @@ void Ex35::initializeLSMesh() {
   _mesh0[0].buildFaceNeighborsFromNodeToElement();
 
   _mesh1[0] = _mesh0[0];
+
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::initializeLSMesh time = "
+            << elapsed << " s" << std::endl;
 }
 
 void Ex35::initializeField_Ball(std::vector<double> xc, double r) {
   if (xc.size() != _dim)
       throw std::runtime_error("WRONG DIMENSION");
 
+  auto t_start = std::chrono::high_resolution_clock::now();
 
   _field0[0].clear();
 
@@ -242,29 +270,49 @@ void Ex35::initializeField_Ball(std::vector<double> xc, double r) {
   }
 
   const unsigned topLevel = _levelN;
-  PsiBall psi2D(xc, r, eps);
-  _mollifier = psi2D._m;
+
+  PsiBall psi(xc, r, eps);
+  _mollifier = psi._m;
+
   _field0[topLevel].addField("Psi", Field::Location::Nodal, 1.);
   const unsigned psiId0_init = _field0[topLevel].id("Psi");
   auto& Psi0 = _field0[topLevel].getById(psiId0_init);
   for (std::size_t k = 0; k < Psi0.size(); ++k) {
     const std::vector<double> x = _field0[topLevel].dofCoordById(psiId0_init, k);
-    Psi0[k] = psi2D(x);
+    Psi0[k] = psi(x);
   }
 
   std::cout << "Iteration = " << 0 << " Number of Points = " << _mesh0[topLevel].X()[0].size() << std::endl;
   writeMeshFieldVTU(_filename + std::to_string(0) + ".vtu", _field0[topLevel]);
 
   for (unsigned l = 0; l <= _levelN; l++) _field2[l] = _field0[l];
+
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::initializeField time = "
+            << elapsed << " s" << std::endl;
 }
 
 void Ex35::initMarkers() {
+  auto t_start = std::chrono::high_resolution_clock::now();
+
   Reinit reinit(_elProj, _field0, _field0[_levelN].id("Psi"), _mollifier);
   reinit.computeMarkersAdvection(_markers);
+
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::initMarkers time = "
+            << elapsed << " s" << std::endl;
 }
 
 void Ex35::advectField(const std::vector<std::vector<double>>& vel, const int it, const double dt) {
-    const char* C_RST = "\033[0m";
+  const char* C_RST = "\033[0m";
   const char* C_BLD = "\033[1m";
   const char* C_CYN = "\033[36m";
   const char* C_YEL = "\033[33m";
@@ -442,6 +490,8 @@ void Ex35::advectField(const std::vector<std::vector<double>>& vel, const int it
 
 void Ex35::interpolatePsiOnNodes(const std::vector<std::vector<double>>& node_coords, std::vector<double>& psi) const {
 
+  auto t_start = std::chrono::high_resolution_clock::now();
+
   std::vector<PointLocatorResult> in, out;
   PointLocator pl(_mesh0[0], 0.1);
   out.clear();
@@ -457,9 +507,19 @@ void Ex35::interpolatePsiOnNodes(const std::vector<std::vector<double>>& node_co
   const unsigned psiId0 = _field0[_levelN].id("Psi");
   _field0[_levelN].evalNodalAtLocatedPointsById(psiId0, out, _elProj, psi, 1.0);
 
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::interpolatePsiOnNodes time = "
+            << elapsed << " s" << std::endl;
+
 }
 
 CellMarkersData Ex35::getCellMarkers(const InitialMeshData & mesh_data) {
+
+  auto t_start = std::chrono::high_resolution_clock::now();
 
   const std::size_t nMarkers = _markers[0].size();
   for (unsigned d = 1; d < _dim; ++d) {
@@ -474,8 +534,6 @@ CellMarkersData Ex35::getCellMarkers(const InitialMeshData & mesh_data) {
   out.clear();
   pl.locateAll(out, _markers);
 
-  // IMPORTANT:
-  // use _matchedLevel because _origToThisElem / _thisToOrigElem were built there
   for (unsigned l = 1; l <= _matchedLevel; ++l) {
     std::swap(in, out);
     _meshvel[l - 1].projectPointLocatorResultsToNextLevel(_meshvel[l], in, out);
@@ -555,6 +613,14 @@ CellMarkersData Ex35::getCellMarkers(const InitialMeshData & mesh_data) {
   //   std::sort(markersComb.begin(), markersComb.end());
   //   markersComb.erase(std::unique(markersComb.begin(), markersComb.end()), markersComb.end());
   // }
+
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::getCellMarkers time = "
+            << elapsed << " s" << std::endl;
 
   return data;
 }
@@ -664,87 +730,134 @@ InitialMeshData Ex35::buildSeed1x2() const {
   return seed;
 }
 
-InitialMeshData Ex35::buildSeed5x10() const {
+InitialMeshData Ex35::buildSeed1x1x2() const {
   InitialMeshData seed;
 
-  const double xmin = 0.0;
-  const double xmax = 1.0;
-  const double ymin = 0.0;
-  const double ymax = 2.0;
+  const double xmin = 0;
+  const double xmax = 1;
+  const double ymin = 0;
+  const double ymax = 1;
+  const double zmin = 0;
+  const double zmax = 2;
 
-  const unsigned nx = 5;   // numero elementi in x
-  const unsigned ny = 10;  // numero elementi in y
+  const double xmid = 0.5 * (xmin + xmax);
+  const double ymid = 0.5 * (ymin + ymax);
+  const double zmid = 0.5 * (zmin + zmax);
 
-  const unsigned nxNodes = 2 * nx + 1; // 11
-  const unsigned nyNodes = 2 * ny + 1; // 21
+  const double zq1  = 0.5 * (zmin + zmid);
+  const double zq3  = 0.5 * (zmid + zmax);
 
-  const double dx = (xmax - xmin) / (2.0 * nx);
-  const double dy = (ymax - ymin) / (2.0 * ny);
-
-  // -----------------------------------------
-  // nodi globali della mesh 5x10 Quad9
+  // -----------------------------
+  // nodi globali della mesh 1x1x2 Hex27
   //
-  // numerazione row-wise dal basso verso l'alto:
+  // griglia 9 x 5:
   //
-  // id(i,j) = j * nxNodes + i
-  //
-  // con:
-  // i = 0, ..., 10
-  // j = 0, ..., 20
-  // -----------------------------------------
-  seed.X.resize(2);
-  seed.X[0].resize(nxNodes * nyNodes);
-  seed.X[1].resize(nxNodes * nyNodes);
 
-  for (unsigned j = 0; j < nyNodes; ++j) {
-    for (unsigned i = 0; i < nxNodes; ++i) {
-      const unsigned id = j * nxNodes + i;
-      seed.X[0][id] = xmin + i * dx;
-      seed.X[1][id] = ymin + j * dy;
-    }
-  }
+  seed.X.resize(3);
 
-  const unsigned nElem = nx * ny;
+  seed.X[0] = {
+    // z =0
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    // z = 0.5
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    // z = 1
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    // z = 1.5
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    // z = 2
+    xmin, xmid, xmax,
+    xmin, xmid, xmax,
+    xmin, xmid, xmax
+  };
 
-  seed.elLevel.assign(nElem, 0);
-  seed.elType.assign(nElem, 3); // Quad9
+  seed.X[1] = {
+    // z = 0
+    ymin, ymin, ymin,
+    ymid, ymid, ymid,
+    ymax, ymax, ymax,
 
-  seed.elTplgy.resize(nElem);
+    // z = 0.5
+    ymin, ymin, ymin,
+    ymid, ymid, ymid,
+    ymax, ymax, ymax,
 
-  for (unsigned ey = 0; ey < ny; ++ey) {
-    for (unsigned ex = 0; ex < nx; ++ex) {
+    // z = 1
+    ymin, ymin, ymin,
+    ymid, ymid, ymid,
+    ymax, ymax, ymax,
 
-      const unsigned elemId = ey * nx + ex;
+    // z = 1.5
+    ymin, ymin, ymin,
+    ymid, ymid, ymid,
+    ymax, ymax, ymax,
 
-      const unsigned i0 = 2 * ex;
-      const unsigned j0 = 2 * ey;
+    // z = 2
+    ymin, ymin, ymin,
+    ymid, ymid, ymid,
+    ymax, ymax, ymax
+  };
 
-      auto nodeId = [nxNodes](unsigned i, unsigned j) {
-        return j * nxNodes + i;
-      };
+  seed.X[2] = {
+    zmin, zmin, zmin,
+    zmin, zmin, zmin,
+    zmin, zmin, zmin,
 
-      const unsigned v0 = nodeId(i0,     j0);
-      const unsigned v1 = nodeId(i0 + 2, j0);
-      const unsigned v2 = nodeId(i0 + 2, j0 + 2);
-      const unsigned v3 = nodeId(i0,     j0 + 2);
+    zq1,  zq1,  zq1,
+    zq1,  zq1,  zq1,
+    zq1,  zq1,  zq1,
 
-      const unsigned e01 = nodeId(i0 + 1, j0);
-      const unsigned e12 = nodeId(i0 + 2, j0 + 1);
-      const unsigned e23 = nodeId(i0 + 1, j0 + 2);
-      const unsigned e30 = nodeId(i0,     j0 + 1);
+    zmid, zmid, zmid,
+    zmid, zmid, zmid,
+    zmid, zmid, zmid,
 
-      const unsigned c = nodeId(i0 + 1, j0 + 1);
+    zq3,  zq3,  zq3,
+    zq3,  zq3,  zq3,
+    zq3,  zq3,  zq3,
 
-      seed.elTplgy[elemId] = {
-        v0, v1, v2, v3,
-        e01, e12, e23, e30,
-        c
-      };
-    }
-  }
+    zmax, zmax, zmax,
+    zmax, zmax, zmax,
+    zmax, zmax, zmax
+  };
+
+  seed.elLevel = {0, 0};
+  seed.elType  = {0, 0}; // Quad9
+
+  // convenzione:
+  // [v0, v1, v2, v3, e01, e12, e23, e30, center]
+
+  seed.elTplgy.resize(2);
+
+  // elemento basso
+  seed.elTplgy[0] = {
+    0, 2, 8, 6, 18, 20, 26, 24,
+    1, 5, 7, 3,
+    19, 23, 25, 21,
+    9, 11, 17, 15,
+    10, 14, 16, 12, 4, 22,
+    13
+  };
+
+  // elemento alto
+  seed.elTplgy[1] = {
+    18, 20, 26, 24, 36, 38, 44, 42,
+    19, 23, 25, 21,
+    37, 41, 43, 39,
+    27, 29, 35, 33,
+    28, 32, 34, 30, 22, 40,
+    31
+  };
 
   return seed;
 }
+
 
 void Ex35::buildMapsToOriginalMesh(const InitialMeshData& mesh_data, const unsigned level) {
   const auto& Xnew      = _Xvel[level];
@@ -840,6 +953,8 @@ std::vector<double> Ex35::interpolatePsiOnOriginalNodes() const {
     throw std::runtime_error("Ex35::interpolatePsiOnOriginalNodes: node map not built");
   }
 
+  auto t_start = std::chrono::high_resolution_clock::now();
+
   const unsigned nOrigNodes = _origToThisNode.size();
 
   const auto& Xvel = _meshvel[_matchedLevel].X();
@@ -893,6 +1008,14 @@ std::vector<double> Ex35::interpolatePsiOnOriginalNodes() const {
       throw std::runtime_error("Ex35::interpolatePsiOnOriginalNodes: non-finite Psi on queried node");
     }
   }
+
+  auto t_end = std::chrono::high_resolution_clock::now();
+
+  const double elapsed =
+    std::chrono::duration<double>(t_end - t_start).count();
+
+  std::cout << "Ex35::interpolatePsiOnOriginalNodes time = "
+            << elapsed << " s" << std::endl;
 
   return psiOrig;
 }

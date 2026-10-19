@@ -318,8 +318,8 @@ int main(int argc, char **argv) {
         return 0.5 * dt;
       };
 
-      const unsigned nPrint  = 1;//(nSteps > 100) ? nSteps / 500 : 1;
-      const unsigned nReinit = (nSteps > 100) ? nSteps / 10 : 101;
+      const unsigned nPrint  = (nSteps > 100) ? nSteps / 400 : 1;
+      const unsigned nReinit = (nSteps > 100) ? nSteps / 100 : 101;
 
       mlMsh0.RefineMesh(numberOfUniformLevels, numberOfUniformLevels, nullptr);
 
@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
 
       LevelSetDiagnostics final_diagnostics;
 
-      for (unsigned t = 1; t <= 3 + 0 * nSteps; t++) {
+      for (unsigned t = 1; t <= 1 + nSteps; t++) {
 
         TimeDiscretization td = (t == 1) ? TimeDiscretization::BackEuler : TimeDiscretization::CrankNicholson;
 

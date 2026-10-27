@@ -1172,20 +1172,14 @@ void RungeKutta4(std::vector<MyVector<double>> &X,
       }
     }
   }
-  const double boundaryTol = 1.e-2;
 
-  for(unsigned i = X[0].begin();
-      i < X[0].end();
-      ++i) {
+  for(unsigned i = X[0].begin(); i < X[0].end(); ++i) {
 
     for(unsigned d = 0; d < dim; ++d) {
-      if(std::abs(X[d][i] - x_min[d]) < boundaryTol) {
-
+      if(X[d][i] < x_min[d]) {
         X[d][i] = x_min[d];
       }
-
-      else if(std::abs(X[d][i] - x_max[d]) < boundaryTol) {
-
+      else if(X[d][i] > x_max[d]) {
         X[d][i] = x_max[d];
       }
     }
@@ -1244,17 +1238,13 @@ void rkStep(MultiLevelSolution & mlSol,
         Xk[d][i] += a[j] * K[j][d][i] * dt;
       }
 
-      const double boundaryTol = 1.e-2;
-
       for (unsigned k = 0; k < X.size(); ++k) {
 
-        if (std::abs(Xk[k][i] - x_min[k]) < boundaryTol) {
-
+        if (Xk[k][i] < x_min[k]) {
           Xk[k][i] = x_min[k];
         }
 
-        else if (std::abs(Xk[k][i] - x_max[k]) < boundaryTol) {
-
+        else if (Xk[k][i] > x_max[k]) {
           Xk[k][i] = x_max[k];
         }
       }

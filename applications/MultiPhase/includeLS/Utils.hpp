@@ -1237,16 +1237,16 @@ void rkStep(MultiLevelSolution & mlSol,
       for(unsigned j = 0; j < a.size(); j++) {
         Xk[d][i] += a[j] * K[j][d][i] * dt;
       }
+    }
+  }
 
-      for (unsigned k = 0; k < X.size(); ++k) {
-
-        if (Xk[k][i] < x_min[k]) {
-          Xk[k][i] = x_min[k];
-        }
-
-        else if (Xk[k][i] > x_max[k]) {
-          Xk[k][i] = x_max[k];
-        }
+  for(unsigned i = Xk[0].begin(); i < Xk[0].end(); ++i) {
+    for(unsigned d = 0; d < nFields; ++d) {
+      if(Xk[d][i] < x_min[d]) {
+        Xk[d][i] = x_min[d];
+      }
+      else if(Xk[d][i] > x_max[d]) {
+        Xk[d][i] = x_max[d];
       }
     }
   }

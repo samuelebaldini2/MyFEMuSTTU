@@ -5,7 +5,7 @@ set -euo pipefail
 ELEMENTS=(0 1 3 4)       # 0=HEX, 1=TET, 3=QUAD, 4=TRI
 PSI="ball"          # ball or nonconvex
 CURVED=1              # 0=straight, 1=analytical curved BALL
-LEVELS=2              # 0 through LEVELS
+LEVELS=3              # 0 through LEVELS
 CURVATURE=0.40         # only used for curved BALL
 NONCONVEX_TRI_TAU=0.09  # TRI7 shape (0,0.25)
 NONCONVEX_TET_TAU=0.09  # TET15 shape (0,0.25)
@@ -17,7 +17,7 @@ NONCONVEX_QUAD_A=4      # QUAD9 x^2 coefficient (strict interior: >4)
 NONCONVEX_QUAD_B=4      # QUAD9 y^2 coefficient (strict interior: >4)
 NONCONVEX_QUAD_C=160    # QUAD9 x^2*y^2 coefficient
 MODE="moment"          # moment, algoim, compare
-DEGREE=10
+DEGREE=7
 ALGOIM_ORDER=9
 ALGOIM_SUBDIVISIONS=0
 VTK=1

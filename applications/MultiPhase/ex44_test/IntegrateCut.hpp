@@ -40,8 +40,8 @@ enum class IntegrationMode {
 struct IntegrationOptions {
   IntegrationMode mode = IntegrationMode::MomentFitting;
   unsigned momentDegree = 10;
-  double absoluteTolerance = 1.e-8;
-  double relativeTolerance = 1.e-8;
+  double absoluteTolerance = 1.e-6;
+  double relativeTolerance = 1.e-6;
   unsigned algoimOrder = 5;
   unsigned algoimSubdivisions = 0;
 };

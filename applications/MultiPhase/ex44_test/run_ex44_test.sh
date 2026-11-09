@@ -2,16 +2,22 @@
 set -euo pipefail
 
 # ------------------ EDIT ONLY THIS SECTION ------------------
-ELEMENTS=(0 1 3 4)           # 0=HEX, 1=TET, 3=QUAD, 4=TRI
-PSI="ball"           # ball, saye, stella (Stella only on straight QUAD9)
-CURVED=1               # 0=straight, 1=analytical curved BALL
-LEVELS=4               # 0 through LEVELS
+ELEMENTS=(0 1 3 4)       # 0=HEX, 1=TET, 3=QUAD, 4=TRI
+PSI="ball"          # ball or nonconvex
+CURVED=1              # 0=straight, 1=analytical curved BALL
+LEVELS=2              # 0 through LEVELS
 CURVATURE=0.40         # only used for curved BALL
-STELLA_A=4             # >4 recommended to keep oval strictly inside [-0.5,0.5]^2
-STELLA_B=4             # =4 means touching the corresponding cell sides
-STELLA_C=160           # x^2*y^2 coefficient
+NONCONVEX_TRI_TAU=0.09  # TRI7 shape (0,0.25)
+NONCONVEX_TET_TAU=0.09  # TET15 shape (0,0.25)
+NONCONVEX_HEX_A=4       # HEX27 coefficients in [-1,1]^3 reference coordinates
+NONCONVEX_HEX_B=4
+NONCONVEX_HEX_C=160     # nonconvex if c/(a*b)>3
+NONCONVEX_HEX_DIGITS=50 # high-precision HEX analytical surface reference
+NONCONVEX_QUAD_A=4      # QUAD9 x^2 coefficient (strict interior: >4)
+NONCONVEX_QUAD_B=4      # QUAD9 y^2 coefficient (strict interior: >4)
+NONCONVEX_QUAD_C=160    # QUAD9 x^2*y^2 coefficient
 MODE="moment"          # moment, algoim, compare
-DEGREE=7
+DEGREE=10
 ALGOIM_ORDER=9
 ALGOIM_SUBDIVISIONS=0
 VTK=1
@@ -47,10 +53,16 @@ cmd=("$EXECUTABLE"
   --algoim-subdivisions "$ALGOIM_SUBDIVISIONS"
   --vtk "$VTK")
 
-if [[ ",${PSI}," == *",stella,"* ]]; then
-  cmd+=(--stella-a "$STELLA_A"
-        --stella-b "$STELLA_B"
-        --stella-c "$STELLA_C")
+if [[ ",$PSI," == *",nonconvex,"* ]]; then
+  cmd+=(--nonconvex-quad-a "$NONCONVEX_QUAD_A"
+        --nonconvex-quad-b "$NONCONVEX_QUAD_B"
+        --nonconvex-quad-c "$NONCONVEX_QUAD_C"
+        --nonconvex-tri-tau "$NONCONVEX_TRI_TAU"
+        --nonconvex-tet-tau "$NONCONVEX_TET_TAU"
+        --nonconvex-hex-a "$NONCONVEX_HEX_A"
+        --nonconvex-hex-b "$NONCONVEX_HEX_B"
+        --nonconvex-hex-c "$NONCONVEX_HEX_C"
+        --nonconvex-hex-digits "$NONCONVEX_HEX_DIGITS")
 fi
 
 "${cmd[@]}"

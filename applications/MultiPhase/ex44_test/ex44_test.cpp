@@ -414,7 +414,7 @@ struct AnalyticBallPsi {
   double radius;
 
   double operator()(const std::vector<double>& physical) const {
-    const unsigned dim=(geometry==TET || geometry==HEX) ? 3u : 2u;
+    const unsigned dim=(geometry==TET || geometry==HEX || geometry==WEDGE) ? 3u : 2u;
     if(physical.size()!=dim)
       throw std::invalid_argument("AnalyticBallPsi: incorrect dimension");
 
@@ -704,8 +704,9 @@ GeomElType Element(const std::string& value) {
   if(value == "tri") return TRI;
   if(value == "quad") return QUAD;
   if(value == "tet") return TET;
+  if(value == "wedge") return WEDGE;
   if(value == "hex") return HEX;
-  throw std::invalid_argument("Unknown element: " + value + " (expected tri,quad,tet,hex)");
+  throw std::invalid_argument("Unknown element: " + value + " (expected tri,quad,tet,wedge,hex)");
 }
 
 const char* ElementName(GeomElType value) {
@@ -713,6 +714,7 @@ const char* ElementName(GeomElType value) {
     case TRI: return "tri";
     case QUAD: return "quad";
     case TET: return "tet";
+    case WEDGE: return "wedge";
     case HEX: return "hex";
     default: throw std::invalid_argument("Unsupported element type");
   }
@@ -728,7 +730,7 @@ const std::string& PsiName(const std::string& value) { return value; }
 void Usage() {
   std::cout << FELevelSetMoments::GaussKronrodRules::Help();
   std::cout << "Usage: MultiPhase_ex44_test [options]\n"
-            << "  --elements tri,quad,tet,hex  Element types (nonconvex: quad,hex only)\n"
+            << "  --elements tri,quad,tet,wedge,hex  Element types (nonconvex: quad,hex only)\n"
             << "  --psi ball,nonconvex          Level-set types (nonconvex: QUAD/HEX only)\n"
             << "  --curved 0|1                 0=straight, 1=analytic curved BALL (default 0)\n"
             << "  --levels N                   Number of AMR refinements, plus level 0 (default 3)\n"
@@ -1031,15 +1033,28 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  if(options.integration.mode != IntegrationMode::MomentFitting &&
+     std::find(options.elements.begin(), options.elements.end(), WEDGE) != options.elements.end()) {
+    if(iproc == 0) std::cerr << "WEDGE21: direct Algoim quadrature is not implemented; use --mode moment.\n";
+    MPI_Abort(MPI_COMM_WORLD, 1);
+    return 1;
+  }
+
   const std::string psiName = "Psi";
   for(const GeomElType element : options.elements) {
-    const unsigned dim = (element == TET || element == HEX) ? 3u : 2u;
+    const unsigned dim = (element == TET || element == HEX || element == WEDGE) ? 3u : 2u;
     for(const std::string& kind : options.psis) {
       std::vector<double> center(dim, 0.);
       double radius = 0.25;
       if(element == TRI || element == TET) {
         const double rin = 1. / (dim + std::sqrt(static_cast<double>(dim)));
         center.assign(dim, -0.5 + rin);
+        radius = 0.5 * rin;
+      } else if(element == WEDGE) {
+        // Unit right-triangle base extruded over z in [-0.5,0.5].
+        // Keep the sphere strictly within both the triangular base and height.
+        const double rin = 1. / (2. + std::sqrt(2.));
+        center = {-0.5 + rin, -0.5 + rin, 0.};
         radius = 0.5 * rin;
       }
 

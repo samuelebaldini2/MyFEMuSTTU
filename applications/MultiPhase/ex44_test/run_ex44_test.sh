@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ------------------ EDIT ONLY THIS SECTION ------------------
-ELEMENTS=(0 1 3 4)           # 0=HEX, 3=QUAD; TRI/TET remain available for BALL
+ELEMENTS=(0 1 2 3 4)         # 0=HEX, 1=TET, 2=WEDGE, 3=QUAD, 4=TRI
 PSI="ball"          # ball or nonconvex (QUAD9/HEX27 only)
 CURVED=1                 # 0=straight; 1=analytical curved BALL only
 LEVELS=0                 # levels 0..LEVELS, preserving the uploaded default
@@ -38,6 +38,7 @@ for element in "${ELEMENTS[@]}"; do
   case "$element" in
     0) element_names+=(hex) ;;
     1) element_names+=(tet) ;;
+    2) element_names+=(wedge) ;;
     3) element_names+=(quad) ;;
     4) element_names+=(tri) ;;
     *) echo "Unsupported element ID: $element" >&2; exit 1 ;;

@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
 
   for (const unsigned numberOfSelectiveLevels : adaptiveLevelsList) {
 
-    const double scalingFactor = 1.0;
+    const double scalingFactor = 1.e2;
 
     unsigned levelN = numberOfUniformLevels + numberOfSelectiveLevels;
     const unsigned levelF = levelN - 1u; //fine level associated for mlmsh0 and mlmsh1
@@ -317,9 +317,9 @@ int main(int argc, char **argv) {
     for (const unsigned nSteps : nStepsList) {
 
       MultiLevelMesh mlMsh0;
-      std::string meshName = "./input/cube_01_unstruct.neu";
-      //mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
-      mlMsh0.GenerateCoarseBoxMesh(nx, ny, nz, xmin, xmax, ymin, ymax, zmin, zmax, elementType, "seventh"); // Turek 1&2
+      std::string meshName = (requestedDim == 2) ? "./input/unstructured_PC_coarse.neu" : "./input/unstructured_cube_hex27.neu";
+      if (simulation == SimulationCase::PAR) mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
+      else mlMsh0.GenerateCoarseBoxMesh(nx, ny, nz, xmin, xmax, ymin, ymax, zmin, zmax, elementType, "seventh"); // Turek 1&2
 
       if (simulation == SimulationCase::PAR) InitializeParasiticCurrents(levelC);
 
@@ -435,8 +435,11 @@ int main(int argc, char **argv) {
       LevelSetMarkers markers(psiName, dim);
 
       // Load coarse mesh and build uniform refinement levels
-      mlmsh1->GenerateCoarseBoxMesh(nx, ny, nz, xmin, xmax, ymin, ymax, zmin, zmax, elementType, "seventh"); // Turek 1&2
-      // mlmsh1->ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
+      
+      
+      if (simulation == SimulationCase::PAR) mlmsh1->ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
+      else mlmsh1->GenerateCoarseBoxMesh(nx, ny, nz, xmin, xmax, ymin, ymax, zmin, zmax, elementType, "seventh"); // Turek 1&2
+
       mlmsh1->RefineMesh(numberOfUniformLevels, numberOfUniformLevels, nullptr);
 
       UpdateColorFunction(*mlsol0, psiName, cName);
@@ -789,7 +792,7 @@ int main(int argc, char **argv) {
         system2.Solve();
 
         if(simulation == SimulationCase::PAR) {
-          PrintParasiticCurrents(&mlSol2, levelC - level0, levelC, time, vName);
+          PrintParasiticCurrents(&mlSol2, levelC - level0, levelC, time, vName, cfg, cutFemIntegration);
         }
 
         *Sol0_C[c0Index] = *originalC;

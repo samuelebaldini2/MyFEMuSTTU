@@ -4285,16 +4285,16 @@ SimulationConfig GetSimulationConfig(const SimulationCase simulation, const unsi
       cfg.x_min[2] = 0.;
       cfg.x_max[2] = (dim == 3) ? 0.01 : 0.;
 
-      cfg.n[0] = (dim == 3) ? 4 : 4;
-      cfg.n[1] = (dim == 3) ? 4 : 4;
+      cfg.n[0] = (dim == 3) ? 4 : 8;
+      cfg.n[1] = (dim == 3) ? 4 : 8;
       cfg.n[2] = (dim == 3) ? 4 : 0;
 
-      cfg.period = 0.03;
+      cfg.period = 1.e-2;
 
       cfg.psi.type = PsiType::BALL;
       cfg.psi.center = {0.005, 0.005, 0.005};
       cfg.psi.center.resize(dim);
-      cfg.psi.radius = 0.004;
+      cfg.psi.radius = 0.002;
 
       cfg.properties.rho1 = 300.;
       cfg.properties.rho2 = 300.;
@@ -5707,9 +5707,16 @@ void InitializeParasiticCurrents(const unsigned levelC) {
 
   std::ofstream out(filename, std::ios::trunc);
 
-  out << std::setw(20) << "time"
-      << std::setw(20) << "levelC"
-      << std::setw(20) << "Umax"
+  const unsigned w = 24;
+
+  out << std::setw(w) << "time"
+      << std::setw(w) << "levelC"
+      << std::setw(w) << "Uinf"
+      << std::setw(w) << "pressureL2"
+      << std::setw(w) << "pressureRelativeL2"
+      << std::setw(w) << "pressureJump"
+      << std::setw(w) << "exactJump"
+      << std::setw(w) << "jumpError"
       << '\n';
 }
 
@@ -5718,44 +5725,293 @@ void PrintParasiticCurrents(MultiLevelSolution* mlSol,
                             const unsigned level,
                             const unsigned levelC,
                             const double time,
-                            const std::vector<std::string>& velocityNames) {
+                            const std::vector<std::string>& velocityNames,
+                            const SimulationConfig& cfg,
+                            const CutFemIntegration integration) {
 
   Solution* sol = mlSol->GetSolutionLevel(level);
-  Mesh* msh = mlSol->_mlMesh->GetLevel(level);
+  Mesh* msh = sol->GetMesh();
 
-  const unsigned dim = velocityNames.size();
-
-  std::vector<unsigned> solIndex(dim);
-
-  for(unsigned d = 0; d < dim; ++d) {
-    solIndex[d] = mlSol->GetIndex(velocityNames[d].c_str());
-  }
-
-  const unsigned solType = mlSol->GetSolutionType(solIndex[0]);
-
-  double localMax = 0.0;
-
+  const unsigned dim = msh->GetDimension();
   const unsigned iproc = msh->processor_id();
 
-  const unsigned begin = msh->_dofOffset[solType][iproc];
-  const unsigned end   = msh->_dofOffset[solType][iproc + 1];
+  if(velocityNames.size() != dim)
+    throw std::runtime_error("Invalid number of velocity components");
 
-  for(unsigned i = begin; i < end; ++i) {
+  // ============================================================
+  // 1. Velocity infinity norm (nodal)
+  // ============================================================
 
-    double u2 = 0.0;
+  std::vector<unsigned> velIndex(dim);
+
+  for(unsigned d = 0; d < dim; ++d)
+    velIndex[d] = mlSol->GetIndex(velocityNames[d].c_str());
+
+  const unsigned first = sol->_Sol[velIndex[0]]->first_local_index();
+  const unsigned last  = sol->_Sol[velIndex[0]]->last_local_index();
+
+  double localUmax = 0.;
+
+  for(unsigned i = first; i < last; ++i) {
+
+    double u2 = 0.;
 
     for(unsigned d = 0; d < dim; ++d) {
-      const double u = sol->_Sol[solIndex[d]]->el(i);
+      const double u = (*sol->_Sol[velIndex[d]])(i);
       u2 += u * u;
     }
 
-    localMax = std::max(localMax, std::sqrt(u2));
+    localUmax = std::max(localUmax, std::sqrt(u2));
   }
 
-  double globalMax = 0.0;
+  double Umax = 0.;
 
-  MPI_Allreduce(&localMax, &globalMax, 1,
+  MPI_Allreduce(&localUmax, &Umax, 1,
                 MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  // ============================================================
+  // 2. Exact Young-Laplace pressure jump
+  // ============================================================
+
+  const double sigma = cfg.properties.sigma;
+  const double radius = cfg.psi.radius;
+
+  if(radius <= 0.)
+    throw std::runtime_error("Invalid PAR radius");
+
+  const double exactJump =
+    sigma * ((dim == 3 || cfg.axisymmetric) ? 2. : 1.) / radius;
+
+  const unsigned p1Index = mlSol->GetIndex("P1");
+  const unsigned p2Index = mlSol->GetIndex("P2");
+  const unsigned pType = mlSol->GetSolutionType(p1Index);
+  const unsigned xType = 2;
+
+  if(mlSol->GetSolutionType(p2Index) != pType)
+    throw std::runtime_error("Pressure FE type mismatch");
+
+  Psi exactPsi(cfg.psi);
+
+  // ============================================================
+  // 3. Integrate pressure on both physical phases
+  //
+  // First pass:
+  //   volume1, volume2, integral(P1), integral(P2)
+  //
+  // Second pass:
+  //   integral((P1 - p0 - exactJump)^2)
+  //   integral((P2 - p0)^2)
+  // ============================================================
+
+  auto IntegratePressure = [&](const bool errorPass,
+                               const double p0) {
+
+    std::vector<double> local(4, 0.);
+
+    for(unsigned iel = msh->_elementOffset[iproc];
+        iel < msh->_elementOffset[iproc + 1]; ++iel) {
+
+      const unsigned ielType = msh->GetElementType(iel);
+      const unsigned nX = msh->GetElementDofNumber(iel, xType);
+      const unsigned nP = msh->GetElementDofNumber(iel, pType);
+
+      const elem_type* femX = fem.GetFiniteElement(ielType, xType);
+      const elem_type* femP = fem.GetFiniteElement(ielType, pType);
+
+      const unsigned nGauss = femX->GetGaussPointNumber();
+
+      if(femP->GetGaussPointNumber() != nGauss)
+        throw std::runtime_error("Pressure Gauss rule mismatch");
+
+      std::vector<std::vector<double>> coordX(dim, std::vector<double>(nX));
+      std::vector<double> psi(nX);
+      std::vector<double> p1(nP);
+      std::vector<double> p2(nP);
+
+      double psiMin = std::numeric_limits<double>::max();
+      double psiMax = -std::numeric_limits<double>::max();
+
+      for(unsigned i = 0; i < nX; ++i) {
+
+        const unsigned dof = msh->GetSolutionDof(i, iel, xType);
+        std::vector<double> x(dim);
+
+        for(unsigned d = 0; d < dim; ++d) {
+          x[d] = (*msh->_topology->_Sol[d])(dof);
+          coordX[d][i] = x[d];
+        }
+
+        psi[i] = exactPsi(x);
+
+        psiMin = std::min(psiMin, psi[i]);
+        psiMax = std::max(psiMax, psi[i]);
+      }
+
+      for(unsigned i = 0; i < nP; ++i) {
+
+        const unsigned dof = msh->GetSolutionDof(i, iel, pType);
+
+        p1[i] = (*sol->_Sol[p1Index])(dof);
+        p2[i] = (*sol->_Sol[p2Index])(dof);
+      }
+
+      std::vector<double> psiG(nGauss, 0.);
+
+      for(unsigned ig = 0; ig < nGauss; ++ig) {
+
+        const double* phi = femX->GetPhi(ig);
+
+        for(unsigned i = 0; i < nX; ++i)
+          psiG[ig] += psi[i] * phi[i];
+
+        psiMin = std::min(psiMin, psiG[ig]);
+        psiMax = std::max(psiMax, psiG[ig]);
+      }
+
+      const bool cut =
+        psiMin <= 0. && psiMax >= 0. &&
+        psiMax - psiMin > 1.e-14;
+
+      std::vector<TypeIO> weightInner(nGauss, 0.);
+
+      if(cut) {
+
+        if(integration == CutFemIntegration::Linear) {
+
+          if(cfw[ielType]->GetGaussQuadraturePointNumber() != nGauss)
+            throw std::runtime_error("Linear quadrature mismatch");
+
+          std::vector<const double*> xg(dim);
+
+          for(unsigned d = 0; d < dim; ++d)
+            xg[d] = femX->GetGaussRule().GetGaussCoordinatePointer(d);
+
+          std::vector<double> a;
+
+          BestFitLinearInterpolation(xg, psiG, a);
+
+          const double b = a[dim];
+          a.resize(dim);
+
+          cfw[ielType]->GetWeightWithMap(0, a, b, weightInner);
+        }
+        else {
+
+          auto* rule = cfwLS[ielType];
+
+          if(rule == nullptr)
+            throw std::runtime_error("Unsupported quadratic cut element");
+
+          if(rule->GetGaussQuadraturePointNumber() != nGauss)
+            throw std::runtime_error("Quadratic quadrature mismatch");
+
+          std::vector<TypeIO> weightInterface(nGauss, 0.);
+
+          rule->SetIntegrationDirection(0);
+          rule->SetDirectionValidation(0);
+
+          rule->GetPhysicalSurfaceWeightsFromNodalGeometry(
+            psi, coordX, weightInner, weightInterface,
+            1.e-8, 1.e-8);
+        }
+      }
+      else {
+        std::fill(weightInner.begin(), weightInner.end(),
+                  (psiMax > 0.) ? 1. : 0.);
+      }
+
+      std::vector<double> phiX;
+      std::vector<double> phiX_x;
+
+      for(unsigned ig = 0; ig < nGauss; ++ig) {
+
+        double weight = 0.;
+
+        femX->Jacobian(coordX, ig, weight, phiX, phiX_x);
+
+        const double* phiP = femP->GetPhi(ig);
+
+        double p1g = 0.;
+        double p2g = 0.;
+
+        for(unsigned i = 0; i < nP; ++i) {
+          p1g += p1[i] * phiP[i];
+          p2g += p2[i] * phiP[i];
+        }
+
+        if(cfg.axisymmetric) {
+
+          double r = 0.;
+
+          for(unsigned i = 0; i < nX; ++i)
+            r += coordX[0][i] * phiX[i];
+
+          r -= cfg.x_min[0];
+
+          weight *= 2. * std::acos(-1.) * std::max(0., r);
+        }
+
+        const double wi = weight * weightInner[ig];
+        const double wo = weight * (1. - weightInner[ig]);
+
+        if(!errorPass) {
+
+          local[0] += wi;
+          local[1] += wo;
+          local[2] += wi * p1g;
+          local[3] += wo * p2g;
+        }
+        else {
+
+          const double e1 = p1g - p0 - exactJump;
+          const double e2 = p2g - p0;
+
+          local[0] += wi * e1 * e1;
+          local[1] += wo * e2 * e2;
+        }
+      }
+    }
+
+    std::vector<double> global(4, 0.);
+
+    MPI_Allreduce(local.data(), global.data(), 4,
+                  MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+    return global;
+  };
+
+  // ============================================================
+  // 4. Pressure L2 error and mean pressure jump
+  // ============================================================
+
+  const auto moments = IntegratePressure(false, 0.);
+
+  const double volume1 = moments[0];
+  const double volume2 = moments[1];
+
+  if(volume1 <= 0. || volume2 <= 0.)
+    throw std::runtime_error("Empty phase in PAR pressure diagnostic");
+
+  const double meanP1 = moments[2] / volume1;
+  const double meanP2 = moments[3] / volume2;
+
+  const double numericalJump = meanP1 - meanP2;
+  const double jumpError = std::abs(numericalJump - exactJump);
+
+  const auto errors = IntegratePressure(true, meanP2);
+
+  const double pressureL2 =
+    std::sqrt(std::max(0., errors[0] + errors[1]));
+
+  const double exactL2 =
+    std::abs(exactJump) * std::sqrt(volume1);
+
+  const double pressureRelativeL2 =
+    (exactL2 > 0.) ? pressureL2 / exactL2 : 0.;
+
+  // ============================================================
+  // 5. Write diagnostics
+  // ============================================================
 
   if(iproc == 0) {
 
@@ -5764,14 +6020,23 @@ void PrintParasiticCurrents(MultiLevelSolution* mlSol,
 
     std::ofstream out(filename, std::ios::app);
 
+    const unsigned w = 24;
+
     out << std::scientific << std::setprecision(12)
-        << std::setw(20) << time
-        << std::setw(20) << levelC
-        << std::setw(20) << globalMax
+        << std::setw(w) << time
+        << std::setw(w) << levelC
+        << std::setw(w) << Umax
+        << std::setw(w) << pressureL2
+        << std::setw(w) << pressureRelativeL2
+        << std::setw(w) << numericalJump
+        << std::setw(w) << exactJump
+        << std::setw(w) << jumpError
         << '\n';
 
-    std::cout << "Parasitic currents: Umax = "
-              << std::scientific << globalMax
+    std::cout << std::scientific
+              << "Parasitic currents: Uinf = " << Umax
+              << ", pressure L2 = " << pressureL2
+              << ", relative L2 = " << pressureRelativeL2
               << std::endl;
   }
 }

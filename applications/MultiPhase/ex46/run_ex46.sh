@@ -9,7 +9,7 @@ set -euo pipefail
 # MPI
 # ------------------------------------------------------------
 
-NPROC=4
+NPROC=8
 NPRINT=100
 NREINIT=1
 
@@ -19,7 +19,7 @@ NREINIT=1
 
 DIM=2
 SIMULATION="par"
-SYMMETRIC=1
+SYMMETRIC=0
 AXISYMMETRIC=0
 
 # ------------------------------------------------------------
@@ -27,7 +27,7 @@ AXISYMMETRIC=0
 # ------------------------------------------------------------
 
 UNIFORM_LEVELS=(1 2 3)
-ADAPTIVE_LEVELS=(2)
+ADAPTIVE_LEVELS=(0)
 LEVEL_OFFSET_PSI=0
 LEVEL_OFFSET=0
 
@@ -35,7 +35,7 @@ LEVEL_OFFSET=0
 # Time discretization
 # ------------------------------------------------------------
 
-NSTEPS=(30000)
+NSTEPS=(1000)
 
 # ------------------------------------------------------------
 # Cutfem integration

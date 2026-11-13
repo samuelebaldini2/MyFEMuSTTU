@@ -10,7 +10,7 @@ set -euo pipefail
 # ------------------------------------------------------------
 
 NPROC=4
-NPRINT=1000
+NPRINT=100
 NREINIT=1
 
 # ------------------------------------------------------------
@@ -26,8 +26,8 @@ AXISYMMETRIC=0
 # Grid configurations
 # ------------------------------------------------------------
 
-UNIFORM_LEVELS=(1)
-ADAPTIVE_LEVELS=(4)
+UNIFORM_LEVELS=(1 2 3)
+ADAPTIVE_LEVELS=(2)
 LEVEL_OFFSET_PSI=0
 LEVEL_OFFSET=0
 
@@ -35,7 +35,7 @@ LEVEL_OFFSET=0
 # Time discretization
 # ------------------------------------------------------------
 
-NSTEPS=(100000)
+NSTEPS=(30000)
 
 # ------------------------------------------------------------
 # Cutfem integration

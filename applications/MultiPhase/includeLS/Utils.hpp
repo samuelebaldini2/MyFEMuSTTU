@@ -4284,9 +4284,9 @@ SimulationConfig GetSimulationConfig(const SimulationCase simulation, const unsi
       cfg.x_min[2] = 0.;
       cfg.x_max[2] = (dim == 3) ? 0.01 : 0.;
 
-      cfg.n[0] = (dim == 3) ? 2 : 4;
-      cfg.n[1] = (dim == 3) ? 2 : 4;
-      cfg.n[2] = (dim == 3) ? 2 : 0;
+      cfg.n[0] = (dim == 3) ? 4 : 4;
+      cfg.n[1] = (dim == 3) ? 4 : 4;
+      cfg.n[2] = (dim == 3) ? 4 : 0;
 
       cfg.period = 0.03;
 
@@ -4572,7 +4572,6 @@ SimulationConfig GetSimulationConfig(const SimulationCase simulation, const unsi
     if (simulation == SimulationCase::PAR) {
       if (dim == 2) HalveDomainDirection(1);
       if (dim == 3) {
-        HalveDomainDirection(1);
         HalveDomainDirection(2);
       }
     }
@@ -5692,5 +5691,86 @@ void PrintBurstingBubbleMetrics(
         << std::setw(w) << d.radius
         << std::setw(w) << d.radiusOverRb
         << '\n';
+  }
+}
+
+void InitializeParasiticCurrents(const unsigned levelC) {
+
+  int iproc;
+  MPI_Comm_rank(MPI_COMM_WORLD, &iproc);
+
+  if(iproc != 0) return;
+
+  const std::string filename =
+    "parasitic_currents_LC" + std::to_string(levelC) + ".dat";
+
+  std::ofstream out(filename, std::ios::trunc);
+
+  out << std::setw(20) << "time"
+      << std::setw(20) << "levelC"
+      << std::setw(20) << "Umax"
+      << '\n';
+}
+
+
+void PrintParasiticCurrents(MultiLevelSolution* mlSol,
+                            const unsigned level,
+                            const unsigned levelC,
+                            const double time,
+                            const std::vector<std::string>& velocityNames) {
+
+  Solution* sol = mlSol->GetSolutionLevel(level);
+  Mesh* msh = mlSol->_mlMesh->GetLevel(level);
+
+  const unsigned dim = velocityNames.size();
+
+  std::vector<unsigned> solIndex(dim);
+
+  for(unsigned d = 0; d < dim; ++d) {
+    solIndex[d] = mlSol->GetIndex(velocityNames[d].c_str());
+  }
+
+  const unsigned solType = mlSol->GetSolutionType(solIndex[0]);
+
+  double localMax = 0.0;
+
+  const unsigned iproc = msh->processor_id();
+
+  const unsigned begin = msh->_dofOffset[solType][iproc];
+  const unsigned end   = msh->_dofOffset[solType][iproc + 1];
+
+  for(unsigned i = begin; i < end; ++i) {
+
+    double u2 = 0.0;
+
+    for(unsigned d = 0; d < dim; ++d) {
+      const double u = sol->_Sol[solIndex[d]]->el(i);
+      u2 += u * u;
+    }
+
+    localMax = std::max(localMax, std::sqrt(u2));
+  }
+
+  double globalMax = 0.0;
+
+  MPI_Allreduce(&localMax, &globalMax, 1,
+                MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+  if(iproc == 0) {
+
+    const std::string filename =
+      "parasitic_currents_LC" + std::to_string(levelC) + ".dat";
+
+    std::ofstream out(filename, std::ios::app);
+
+    out << std::scientific << std::setprecision(12)
+        << std::setw(20) << time
+        << std::setw(20) << levelC
+        << std::setw(20) << globalMax
+        << '\n';
+
+    std::cout << "Parasitic currents: Umax = "
+              << std::scientific << globalMax
+              << std::endl;
   }
 }

@@ -1624,11 +1624,18 @@ namespace femus {
   void Mesh::BuildSingleElement(const GeomElType geometry,
                                 const std::array<double, 3>& lo,
                                 const std::array<double, 3>& hi) {
-    if (geometry != QUAD && geometry != TRI &&
-        geometry != HEX  && geometry != TET)
-      throw std::invalid_argument("Supported types: QUAD, TRI, HEX, TET");
+    // if (geometry != QUAD && geometry != TRI &&
+    //     geometry != HEX  && geometry != TET)
+    //   throw std::invalid_argument("Supported types: QUAD, TRI, HEX, TET");
 
-    const unsigned dim = (geometry == HEX || geometry == TET) ? 3u : 2u;
+    // const unsigned dim = (geometry == HEX || geometry == TET) ? 3u : 2u;
+
+    if (geometry != QUAD && geometry != TRI &&
+        geometry != HEX && geometry != TET && geometry != WEDGE)
+      throw std::invalid_argument("Unsupported single-element geometry");
+
+    const unsigned dim = (geometry == HEX || geometry == TET || geometry == WEDGE) ? 3u : 2u;
+
     if (!(lo[0] < hi[0]) || !(lo[1] < hi[1]) ||
         (dim == 3u && !(lo[2] < hi[2])))
       throw std::invalid_argument("Invalid single-element bounds");
@@ -1678,6 +1685,22 @@ namespace femus {
           {{.25,.25,.25}}
         };
         break;
+      case WEDGE:
+        reference = {
+          {{0,0,0}}, {{1,0,0}}, {{0,1,0}},
+          {{0,0,1}}, {{1,0,1}}, {{0,1,1}},
+
+          {{0.5,0,0}}, {{0.5,0.5,0}}, {{0,0.5,0}},
+          {{0.5,0,1}}, {{0.5,0.5,1}}, {{0,0.5,1}},
+
+          {{0,0,0.5}}, {{1,0,0.5}}, {{0,1,0.5}},
+          {{0.5,0,0.5}}, {{0.5,0.5,0.5}}, {{0,0.5,0.5}},
+
+          {{1./3.,1./3.,0}},
+          {{1./3.,1./3.,1}},
+          {{1./3.,1./3.,0.5}}
+        };
+        break;
       default: break;
     }
 
@@ -1709,9 +1732,12 @@ namespace femus {
     static const char* const triNames[]  = {"bottom", "diagonal", "left"};
     static const char* const hexNames[]  = {"ymin", "xmax", "ymax", "xmin", "zmin", "zmax"};
     static const char* const tetNames[]  = {"zmin", "ymin", "diagonal", "xmin"};
-    const char* const* names = (geometry == QUAD) ? quadNames :
-                               (geometry == TRI) ? triNames :
-                               (geometry == HEX) ? hexNames : tetNames;
+    static const char* const wedgeNames[] = {"ymin", "diagonal", "xmin", "zmin", "zmax"};
+    const char* const* names =
+      (geometry == QUAD)  ? quadNames :
+      (geometry == TRI)   ? triNames :
+      (geometry == HEX)   ? hexNames :
+      (geometry == WEDGE) ? wedgeNames : tetNames;
     for (unsigned face = 0; face < nFaces; ++face) {
       el->SetFaceElementIndex(0, face, -static_cast<int>(face) - 2);
       _boundaryinfo[face] = names[face];
@@ -1778,9 +1804,9 @@ void Mesh::EvaluateAnalyticBallMap(
     const std::array<double,3>& q,
     std::array<double,3>& x) {
 
-  if(geometry!=TRI && geometry!=QUAD &&
-     geometry!=TET && geometry!=HEX)
-    throw std::invalid_argument("Analytic BALL: unsupported geometry");
+  if(geometry != TRI && geometry != QUAD &&
+   geometry != TET && geometry != HEX && geometry != WEDGE)
+  throw std::invalid_argument("Analytic BALL: unsupported geometry");
   if(!(curvature>=0.) || !std::isfinite(curvature))
     throw std::invalid_argument("Analytic BALL: invalid curvature");
 
@@ -1808,9 +1834,9 @@ std::array<double,3> Mesh::InvertAnalyticBallMap(
     double curvature,
     const std::array<double,3>& x) {
 
-  if(geometry!=TRI && geometry!=QUAD &&
-     geometry!=TET && geometry!=HEX)
-    throw std::invalid_argument("Analytic BALL: unsupported geometry");
+  if(geometry != TRI && geometry != QUAD &&
+   geometry != TET && geometry != HEX && geometry != WEDGE)
+  throw std::invalid_argument("Analytic BALL: unsupported geometry");
   if(!(curvature>=0.) || !std::isfinite(curvature))
     throw std::invalid_argument("Analytic BALL: invalid curvature");
 
@@ -1864,13 +1890,13 @@ void Mesh::CurveSingleElementAnalyticBall(
   if(GetNumberOfElements()!=1u)
     throw std::runtime_error("Analytic BALL requires exactly one element");
   const unsigned geometry=GetElementType(0);
-  if(geometry!=TRI && geometry!=QUAD &&
-     geometry!=TET && geometry!=HEX)
-    throw std::invalid_argument("Analytic BALL: unsupported geometry");
+  if(geometry != TRI && geometry != QUAD &&
+   geometry != TET && geometry != HEX && geometry != WEDGE)
+  throw std::invalid_argument("Analytic BALL: unsupported geometry");
   if(!(curvature>=0.) || !std::isfinite(curvature))
     throw std::invalid_argument("Analytic BALL: invalid curvature");
 
-  const unsigned dim=(geometry==TET || geometry==HEX) ? 3u : 2u;
+  const unsigned dim = (geometry == TET || geometry == HEX || geometry == WEDGE) ? 3u : 2u;
   const unsigned nNodes=GetElementDofNumber(0,2);
 
   std::vector<std::vector<double>> newCoords(dim);

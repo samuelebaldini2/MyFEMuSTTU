@@ -424,12 +424,17 @@ namespace femus {
                 _finiteElementGeometryFlag[3] = true; break;
       case TET: _finiteElementGeometryFlag[1] = true;
                 _finiteElementGeometryFlag[4] = true; break;
+      case WEDGE:
+        _finiteElementGeometryFlag[2] = true;
+        _finiteElementGeometryFlag[3] = true;
+        _finiteElementGeometryFlag[4] = true;
+        break;
       case QUAD: _finiteElementGeometryFlag[3] = true; break;
       case TRI: _finiteElementGeometryFlag[4] = true; break;
       default: throw std::invalid_argument("Unsupported element geometry");
     }
 
-    const bool is3D = (geometry == HEX || geometry == TET);
+    const bool is3D = (geometry == HEX || geometry == TET || geometry == WEDGE);
     if (!(lo[0] < hi[0]) || !(lo[1] < hi[1]) ||
         (is3D && !(lo[2] < hi[2])))
       throw std::invalid_argument("Invalid single-element bounds");
@@ -451,9 +456,9 @@ Mesh* MultiLevelMesh::GenerateSingleAnalyticBallElementMesh(
     double curvature,
     const char GaussOrder[]) {
 
-  if(geometry!=TRI && geometry!=QUAD &&
-     geometry!=TET && geometry!=HEX)
-    throw std::invalid_argument("Analytic BALL: unsupported geometry");
+  if(geometry != TRI && geometry != QUAD &&
+   geometry != TET && geometry != HEX && geometry != WEDGE)
+  throw std::invalid_argument("Analytic BALL: unsupported geometry");
 
   Mesh* mesh=GenerateSingleElementMesh(geometry,lo,hi,GaussOrder);
   mesh->CurveSingleElementAnalyticBall(center,curvature);

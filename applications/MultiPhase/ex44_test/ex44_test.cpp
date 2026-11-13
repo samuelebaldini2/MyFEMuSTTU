@@ -414,7 +414,7 @@ struct AnalyticBallPsi {
   double radius;
 
   double operator()(const std::vector<double>& physical) const {
-    const unsigned dim=(geometry==TET || geometry==HEX) ? 3u : 2u;
+    const unsigned dim = (geometry == TET || geometry == HEX || geometry == WEDGE) ? 3u : 2u;
     if(physical.size()!=dim)
       throw std::invalid_argument("AnalyticBallPsi: incorrect dimension");
 
@@ -705,6 +705,7 @@ GeomElType Element(const std::string& value) {
   if(value == "quad") return QUAD;
   if(value == "tet") return TET;
   if(value == "hex") return HEX;
+  if(value == "wedge") return WEDGE;
   throw std::invalid_argument("Unknown element: " + value + " (expected tri,quad,tet,hex)");
 }
 
@@ -714,6 +715,7 @@ const char* ElementName(GeomElType value) {
     case QUAD: return "quad";
     case TET: return "tet";
     case HEX: return "hex";
+    case WEDGE: return "wedge";
     default: throw std::invalid_argument("Unsupported element type");
   }
 }
@@ -1033,13 +1035,19 @@ int main(int argc, char** argv) {
 
   const std::string psiName = "Psi";
   for(const GeomElType element : options.elements) {
-    const unsigned dim = (element == TET || element == HEX) ? 3u : 2u;
+    const unsigned dim = (element == TET || element == HEX || element == WEDGE) ? 3u : 2u;
     for(const std::string& kind : options.psis) {
       std::vector<double> center(dim, 0.);
       double radius = 0.25;
       if(element == TRI || element == TET) {
         const double rin = 1. / (dim + std::sqrt(static_cast<double>(dim)));
         center.assign(dim, -0.5 + rin);
+        radius = 0.5 * rin;
+      }
+      else if(element == WEDGE) {
+        const double rin = 1. / (2. + std::sqrt(2.));
+
+        center = {-0.5 + rin, -0.5 + rin, 0.};
         radius = 0.5 * rin;
       }
 

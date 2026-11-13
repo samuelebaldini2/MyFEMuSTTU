@@ -289,6 +289,8 @@ int main(int argc, char **argv) {
       //mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
       mlMsh0.GenerateCoarseBoxMesh(nx, ny, nz, xmin, xmax, ymin, ymax, zmin, zmax, elementType, "seventh"); // Turek 1&2
 
+      if (simulation == SimulationCase::PAR) InitializeParasiticCurrents(levelC);
+
       dt = period / nSteps;
 
       auto TimeStepMultiphase = [](const double time) {
@@ -754,6 +756,10 @@ int main(int argc, char **argv) {
         //system2.MGsolve();
         system2.Solve();
 
+        if(simulation == SimulationCase::PAR) {
+          PrintParasiticCurrents(&mlSol2, levelC - level0, levelC, time, vName);
+        }
+
         *Sol0_C[c0Index] = *originalC;
 
         for(unsigned l = 0; l < msh2.size(); l++)
@@ -1010,7 +1016,7 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
     throw std::runtime_error("Pressure type mismatch");
   }
 
-  // AssembleGhostPenaltyVelocity(ml_prob2);
+  AssembleGhostPenaltyVelocity(ml_prob2);
 
   if (solPType == 3) {
     AssembleGhostPenaltyDGP(ml_prob2, true);
@@ -1816,7 +1822,7 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
             }
           }
 
-          double surfaceTensionCoefficient = cnew * cnew * sigma * dt * surfaceWeight * axisWeight * 0;
+          double surfaceTensionCoefficient = cnew * cnew * sigma * dt * surfaceWeight * axisWeight;
 
           for(unsigned i = 0; i < nDofsV; i++) {
             for(unsigned j = 0; j < nDofsV; j++) {

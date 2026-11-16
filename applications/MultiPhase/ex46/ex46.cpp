@@ -16,6 +16,7 @@
 
 #include "petsc.h"
 #include "petscmat.h"
+#include "SurfaceForceBalance.hpp"
 #include "PetscMatrix.hpp"
 #include "Fem.hpp"
 
@@ -41,6 +42,8 @@ using namespace femus;
 #include "../includeLS/GhostPenaltySparsityPattern.hpp"
 
 bool printdb = false;
+// Activated for the static parasitic-current benchmark.
+bool runSurfaceForceRepresentability = false;
 
 // const RungeKutta::VelKind velocityType = RungeKutta::VelKind::Zero;
 //const RungeKutta::VelKind velocityType = RungeKutta::VelKind::Translation;
@@ -180,6 +183,7 @@ int main(int argc, char **argv) {
   const unsigned axisymmetric = args.axisymmetric;
 
   cutFemIntegration = args.cutFemIntegration;
+  runSurfaceForceRepresentability = (simulation == SimulationCase::PAR);
   if(cutFemIntegration == CutFemIntegration::Quadratic && !axisymmetric) surfaceFem.reset(new Fem(2U*surfaceMomentOrder,requestedDim));
 
   const ElemType elementType = (requestedDim == 2) ? QUAD9 : HEX27;
@@ -1075,6 +1079,13 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
   const unsigned levelC = mParam.levelC;
   const unsigned level0 = mParam.level0;
 
+  const bool checkForceBalance = runSurfaceForceRepresentability &&
+                                 (levelToAssemble + level0 == levelC);
+  ex46_balance::SurfaceForceRepresentability forceBalance;
+  if (checkForceBalance)
+    forceBalance.initialize(static_cast<PetscInt>(RES->local_size()),
+                            static_cast<PetscInt>(RES->size()));
+
   const TimeDiscretization td = mParam.td;
   const double cold = (td == TimeDiscretization::CrankNicholson) ? 0.5 : 0.;
   const double cnew = (td == TimeDiscretization::CrankNicholson) ? 0.5 : 1.;
@@ -1387,6 +1398,16 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
         Res.assign(nDofsVP, 0.);
         Jac.assign(nDofsVP * nDofsVP, 0.);
 
+        std::vector<double> localSurfaceForce, localVelocityMass;
+        std::vector<char> freeVelocity, freeP1, freeP2;
+        if (checkForceBalance) {
+          localSurfaceForce.assign(dim * nDofsV, 0.0);
+          localVelocityMass.assign(nDofsV * nDofsV, 0.0);
+          freeVelocity.assign(dim * nDofsV, 0);
+          freeP1.assign(nDofsP, 0);
+          freeP2.assign(nDofsP, 0);
+        }
+
         for(unsigned  d = 0; d < dim; d++) {
           solV[d].resize(nDofsV);
           solVOld[d].resize(nDofsV);
@@ -1429,6 +1450,25 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
             solP2[i] = solP2_recv[offsetP[k] + i];;
             sysDof[dim * nDofsV + i ] = pdeSys->GetSystemDof(solP1Index, solP1PdeIndex, solPDof);
             sysDof[dim * nDofsV + nDofsP + i ] = pdeSys->GetSystemDof(solP2Index, solP2PdeIndex, solPDof);
+          }
+        }
+
+        if (checkForceBalance) {
+          // The indices of fine quadrature cells refer to the levelC system.
+          for (unsigned i = 0; i < nDofsV; ++i) {
+            const unsigned solDof = (l == levelC)
+                ? msh->GetSolutionDof(i, iel, solVType)
+                : dofV_recv[offsetV[k] + i];
+            for (unsigned I = 0; I < dim; ++I)
+              freeVelocity[I * nDofsV + i] =
+                  (*sol->_Bdc[solVIndex[I]])(solDof) > 0.5;
+          }
+          for (unsigned j = 0; j < nDofsP; ++j) {
+            const unsigned solDof = (l == levelC)
+                ? msh->GetSolutionDof(j, iel, solPType)
+                : dofP_recv[offsetP[k] + j];
+            freeP1[j] = (*sol->_Bdc[solP1Index])(solDof) > 0.5;
+            freeP2[j] = (*sol->_Bdc[solP2Index])(solDof) > 0.5;
           }
         }
 
@@ -1724,6 +1764,15 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
           A += weight * weightCFInt[ig];
           Per += surfaceWeight*(tangentialSurfaceWeights ? surfaceMetricSquared : 1.);
 
+          if (checkForceBalance) {
+            // The L2 mass matrix has no density factor.
+            const double dm = weight * axisWeight;
+            for (unsigned i = 0; i < nDofsV; ++i)
+              for (unsigned j = 0; j < nDofsV; ++j)
+                localVelocityMass[i * nDofsV + j] +=
+                    dm * phiV[i] * phiV[j];
+          }
+
           for (unsigned d = 0; d < dim; ++d) {
             solV_gss[d] = 0.0;
             solVOld_gss[d] = 0.0;
@@ -1807,13 +1856,25 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
 
               // surface tension stabilization -- rhs contribution
               if(cut == 1) {
-                if(tangentialSurfaceWeights) Res[I*nDofsV+i] -= sigma*surfaceForce[i*dim+I]*surfaceWeight;
-                else for(unsigned d = 0; d < dim; ++d) Res[I*nDofsV+i] -= sigma*axisWeight*P[I][d]*phiV_x[i*dim+d]*surfaceWeight;
+                double physicalSurfaceForce = 0.0;
+                if (tangentialSurfaceWeights)
+                  physicalSurfaceForce =
+                      sigma * surfaceForce[i * dim + I] * surfaceWeight;
+                else
+                  for (unsigned d = 0; d < dim; ++d)
+                    physicalSurfaceForce +=
+                        sigma * axisWeight * P[I][d] *
+                        phiV_x[i * dim + d] * surfaceWeight;
 
-                if(axisymmetric && I == 0) {
-                  Res[I * nDofsV + i] += -sigma * phiV[i] * surfaceWeight;
-                }
+                if (axisymmetric && I == 0)
+                  physicalSurfaceForce += sigma * phiV[i] * surfaceWeight;
 
+                Res[I * nDofsV + i] -= physicalSurfaceForce;
+
+                if (checkForceBalance)
+                  localSurfaceForce[I * nDofsV + i] += physicalSurfaceForce;
+
+                // Exclude velocity-dependent surface stabilization.
                 double stabSF = 0.0;
 
                 if(tangentialSurfaceWeights) {
@@ -1983,6 +2044,11 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
           // }
 
         }
+
+        if (checkForceBalance)
+          forceBalance.addElement(sysDof, dim, nDofsV, nDofsP,
+                                  freeVelocity, freeP1, freeP2,
+                                  localSurfaceForce, localVelocityMass, Jac);
 
         RES->add_vector_blocked(Res, sysDof);
         KK->add_matrix_blocked(Jac, sysDof, sysDof);
@@ -2311,6 +2377,12 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
 
   RES->close();
   KK->close();
+
+  // Test existence of a balancing pressure without solving Navier--Stokes.
+  if (checkForceBalance) {
+    forceBalance.report();
+    forceBalance.destroy();
+  }
 
   std::cout << "Matrix Assembly time        = " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::flush << std::endl;
 

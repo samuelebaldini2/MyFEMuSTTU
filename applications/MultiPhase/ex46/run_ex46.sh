@@ -23,7 +23,6 @@ SYMMETRIC=0
 AXISYMMETRIC=0
 
 SURFACE_PRESSURE_DIAGNOSTIC="${SURFACE_PRESSURE_DIAGNOSTIC:-0}"
-SURFACE_STANDALONE_MATCH="${SURFACE_STANDALONE_MATCH:-0}"
 
 # ------------------------------------------------------------
 # Grid configurations
@@ -45,41 +44,22 @@ NSTEPS=(1000)
 # ------------------------------------------------------------
 
 CUTFEM_INTEGRATION="quadratic"     # linear | quadratic
-SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}" # 1: legacy scalar weight; 3: component RHS weights
-# Standalone parity is an opt-in diagnostic control; production defaults are unchanged.
-if [[ "${SURFACE_STANDALONE_MATCH}" == "1" ]]; then
-  if [[ "${SURFACE_WEIGHTS}" == "1" ]]; then DEFAULT_MOMENT_ORDER=17; else DEFAULT_MOMENT_ORDER=10; fi
-  DEFAULT_MOMENT_TOL=1e-12
-  DEFAULT_FIT_PRECISION=quad
-  DEFAULT_GK_RULE=15/31
-  DEFAULT_PROJECT_Q1=1
-  if [[ "${SURFACE_WEIGHTS}" == "3" ]]; then DEFAULT_NORMAL_FIRST=1; else DEFAULT_NORMAL_FIRST=0; fi
-  DEFAULT_UNCONSTRAINED=1
-  DEFAULT_STRICT_WARNINGS=1
-  DEFAULT_EXTENDED_BUDGET=1
-  DEFAULT_DIAGNOSTIC_ONLY=1
+# Match the standalone quadrature profile without changing defaults when disabled.
+SURFACE_REFERENCE_PROFILE="${SURFACE_REFERENCE_PROFILE:-0}"   # 0: production, 1: reference quadrature
+if [[ "${SURFACE_REFERENCE_PROFILE}" == "1" ]]; then
+  SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-$([[ "${SURFACE_WEIGHTS:-3}" == "1" ]] && echo 17 || echo 10)}"
+  SURFACE_MOMENT_TOL="${SURFACE_MOMENT_TOL:-1e-12}"
+  SURFACE_GK="${SURFACE_GK:-15/31}"
+  SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-1}"
+  SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-1}"
 else
-  DEFAULT_MOMENT_ORDER=10
-  DEFAULT_MOMENT_TOL=1e-8
-  DEFAULT_FIT_PRECISION=long-double
-  DEFAULT_GK_RULE=7/15
-  DEFAULT_PROJECT_Q1=0
-  DEFAULT_NORMAL_FIRST=0
-  DEFAULT_UNCONSTRAINED=0
-  DEFAULT_STRICT_WARNINGS=0
-  DEFAULT_EXTENDED_BUDGET=0
-  DEFAULT_DIAGNOSTIC_ONLY=0
+  SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-10}"
+  SURFACE_MOMENT_TOL="${SURFACE_MOMENT_TOL:-1e-8}"
+  SURFACE_GK="${SURFACE_GK:-7/15}"
+  SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-0}"
+  SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-0}"
 fi
-SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-$DEFAULT_MOMENT_ORDER}"
-SURFACE_MOMENT_TOL="${SURFACE_MOMENT_TOL:-$DEFAULT_MOMENT_TOL}"
-SURFACE_FIT_PRECISION="${SURFACE_FIT_PRECISION:-$DEFAULT_FIT_PRECISION}"
-SURFACE_GK_RULE="${SURFACE_GK_RULE:-$DEFAULT_GK_RULE}"
-SURFACE_PROJECT_Q1="${SURFACE_PROJECT_Q1:-$DEFAULT_PROJECT_Q1}"
-SURFACE_NORMAL_FIRST="${SURFACE_NORMAL_FIRST:-$DEFAULT_NORMAL_FIRST}"
-SURFACE_UNCONSTRAINED_PRESSURE="${SURFACE_UNCONSTRAINED_PRESSURE:-$DEFAULT_UNCONSTRAINED}"
-SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-$DEFAULT_STRICT_WARNINGS}"
-SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-$DEFAULT_EXTENDED_BUDGET}"
-SURFACE_PRESSURE_ONLY="${SURFACE_PRESSURE_ONLY:-$DEFAULT_DIAGNOSTIC_ONLY}"
+SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}" # 1: legacy scalar weight; 3: component RHS weights
 
 # ------------------------------------------------------------
 # Velocity multigrid
@@ -111,24 +91,14 @@ SOURCE_SCRIPT_DIR="$(
   dirname "$(readlink -f "${BASH_SOURCE[0]}")"
 )"
 
-for variable in SURFACE_STANDALONE_MATCH SURFACE_PROJECT_Q1 SURFACE_NORMAL_FIRST SURFACE_UNCONSTRAINED_PRESSURE SURFACE_STRICT_WARNINGS SURFACE_EXTENDED_BUDGET SURFACE_PRESSURE_ONLY; do
-  value="${!variable}"
-  if [[ "$value" != 0 && "$value" != 1 ]]; then
-    echo "ERROR: $variable must be 0 or 1."
-    exit 1
+for variable in SURFACE_REFERENCE_PROFILE SURFACE_EXTENDED_BUDGET SURFACE_STRICT_WARNINGS; do
+  if [[ "${!variable}" != "0" && "${!variable}" != "1" ]]; then
+    echo "ERROR: $variable must be 0 or 1" >&2; exit 1
   fi
 done
-
-if [[ "${SURFACE_STANDALONE_MATCH}" == "1" && "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
-  echo "ERROR: SURFACE_STANDALONE_MATCH requires SURFACE_PRESSURE_DIAGNOSTIC=1."
-  exit 1
+if [[ "${SURFACE_REFERENCE_PROFILE}" == "1" && "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
+  echo "ERROR: SURFACE_REFERENCE_PROFILE requires SURFACE_PRESSURE_DIAGNOSTIC=1" >&2; exit 1
 fi
-
-if [[ "${SURFACE_FIT_PRECISION}" != "long-double" && "${SURFACE_FIT_PRECISION}" != "quad" ]]; then
-  echo "ERROR: SURFACE_FIT_PRECISION must be long-double or quad."
-  exit 1
-fi
-
 if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" != "0" &&
       "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
   echo "ERROR: SURFACE_PRESSURE_DIAGNOSTIC must be 0 or 1."
@@ -379,12 +349,9 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
       echo "Level offset psi   : ${LEVEL_OFFSET_PSI}"
       echo "CutFEM integration : ${CUTFEM_INTEGRATION}"
       echo "Surface RHS weights: ${SURFACE_WEIGHTS}"
-      echo "Standalone parity  : ${SURFACE_STANDALONE_MATCH}"
-      echo "Moment order/tol   : ${SURFACE_MOMENT_ORDER} / ${SURFACE_MOMENT_TOL}"
-      echo "Fitting/GK         : ${SURFACE_FIT_PRECISION} / ${SURFACE_GK_RULE}"
-      echo "Project Q1         : ${SURFACE_PROJECT_Q1}"
-      echo "Normal first       : ${SURFACE_NORMAL_FIRST}"
-      echo "Unconstrained P    : ${SURFACE_UNCONSTRAINED_PRESSURE}"
+      echo "Reference profile  : ${SURFACE_REFERENCE_PROFILE}"
+      echo "Moment tolerance   : ${SURFACE_MOMENT_TOL}"
+      echo "Moment order / GK  : ${SURFACE_MOMENT_ORDER} / ${SURFACE_GK}"
       echo "Solver levels      : ${NLEVELS}"
       echo "Number of steps    : ${nsteps}"
       echo "Dimension          : ${DIM}"
@@ -400,11 +367,7 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         mkdir -p "$(dirname "${DIAG_PREFIX}")"
       fi
 
-      if [[ "${SURFACE_EXTENDED_BUDGET}" == "1" ]]; then
-        export FEMUS_CUTFEM_UNLIMITED=1
-      else
-        unset FEMUS_CUTFEM_UNLIMITED
-      fi
+      if [[ "${SURFACE_EXTENDED_BUDGET}" == "1" ]]; then export FEMUS_CUTFEM_UNLIMITED=1; else unset FEMUS_CUTFEM_UNLIMITED; fi
 
       mpirun -n "${NPROC}" \
         "${EXECUTABLE}" \
@@ -418,16 +381,11 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --surface-moment-order "${SURFACE_MOMENT_ORDER}" \
         --surface-weights "${SURFACE_WEIGHTS}" \
         --surface-moment-tolerance "${SURFACE_MOMENT_TOL}" \
-        --surface-fit-precision "${SURFACE_FIT_PRECISION}" \
-        --gk-regular-2d "${SURFACE_GK_RULE}" \
-        --gk-tangent-2d "${SURFACE_GK_RULE}" \
-        --gk-regular-3d "${SURFACE_GK_RULE}" \
-        --gk-tangent-3d "${SURFACE_GK_RULE}" \
-        --surface-pressure-project-q1 "${SURFACE_PROJECT_Q1}" \
-        --surface-pressure-normal-first "${SURFACE_NORMAL_FIRST}" \
-        --surface-pressure-unconstrained "${SURFACE_UNCONSTRAINED_PRESSURE}" \
-        --surface-pressure-strict-warnings "${SURFACE_STRICT_WARNINGS}" \
-        --surface-pressure-only "${SURFACE_PRESSURE_ONLY}" \
+        --surface-strict-warnings "${SURFACE_STRICT_WARNINGS}" \
+        --gk-regular-2d "${SURFACE_GK}" \
+        --gk-tangent-2d "${SURFACE_GK}" \
+        --gk-regular-3d "${SURFACE_GK}" \
+        --gk-tangent-3d "${SURFACE_GK}" \
         --nsteps "${nsteps}" \
         --dim "${DIM}" \
         --simulation "${SIMULATION}" \
@@ -439,13 +397,11 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --surface-pressure-prefix "${DIAG_PREFIX}" \
 
       if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" ]]; then
-        ANALYSIS_ARGS=()
-        if [[ "${SURFACE_UNCONSTRAINED_PRESSURE}" == "1" ]]; then
-          ANALYSIS_ARGS+=(--unconstrained-pressure)
-        fi
+
         OPENBLAS_NUM_THREADS=1 python3 \
           "${SOURCE_SCRIPT_DIR}/diagnostic/solve_surface_pressure_range.py" \
-          "${DIAG_PREFIX}" "${ANALYSIS_ARGS[@]}"
+          "${DIAG_PREFIX}"
+
       fi
 
       echo

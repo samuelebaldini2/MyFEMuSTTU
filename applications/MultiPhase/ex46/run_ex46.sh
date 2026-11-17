@@ -403,7 +403,7 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --surface-pressure-normal-first "${SURFACE_NORMAL_FIRST}" \
         --surface-pressure-unconstrained "${SURFACE_UNCONSTRAINED}" \
         --surface-pressure-only "${SURFACE_PRESSURE_ONLY}" \
-        --surface-strict-warnings "${SURFACE_STRICT_WARNINGS}" \
+        --surface-pressure-strict-warnings "${SURFACE_STRICT_WARNINGS}" \
         --gk-regular-2d "${SURFACE_GK}" \
         --gk-tangent-2d "${SURFACE_GK}" \
         --gk-regular-3d "${SURFACE_GK}" \

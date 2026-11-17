@@ -45,6 +45,7 @@ NSTEPS=(1000)
 
 CUTFEM_INTEGRATION="quadratic"     # linear | quadratic
 # Match the standalone quadrature profile without changing defaults when disabled.
+SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}"
 SURFACE_REFERENCE_PROFILE="${SURFACE_REFERENCE_PROFILE:-0}"   # 0: production, 1: reference quadrature
 if [[ "${SURFACE_REFERENCE_PROFILE}" == "1" ]]; then
   SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-$([[ "${SURFACE_WEIGHTS:-3}" == "1" ]] && echo 17 || echo 10)}"
@@ -69,7 +70,6 @@ else
   SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-0}"
   SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-0}"
 fi
-SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}" # 1: legacy scalar weight; 3: component RHS weights
 
 # ------------------------------------------------------------
 # Velocity multigrid
@@ -384,7 +384,7 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         mkdir -p "$(dirname "${DIAG_PREFIX}")"
       fi
 
-      if [[ "${SURFACE_EXTENDED_BUDGET}" == "1" ]]; then export FEMUS_CUTFEM_UNLIMITED=1; else unset FEMUS_CUTFEM_UNLIMITED; fi
+      if [[ "${SURFACE_EXTENDED_BUDGET}" == "1" ]]; then export FEMUS_CUTFEM_UNLIMITED=1; fi
 
       mpirun -n "${NPROC}" \
         "${EXECUTABLE}" \

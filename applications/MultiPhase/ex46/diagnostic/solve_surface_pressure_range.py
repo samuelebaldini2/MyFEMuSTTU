@@ -47,6 +47,10 @@ def main():
     ap.add_argument("prefix", help="Common file prefix passed to --surface-pressure-prefix")
     ap.add_argument("--maxiter", type=int, default=6000)
     ap.add_argument("--max-relative", type=float, default=None)
+    ap.add_argument("--unconstrained-pressure", action="store_true",
+                    help="Match standalone range: retain both pressure fields; drop zero-support columns only")
+    ap.add_argument("--normal-rtol", type=float, default=1.e-10,
+                    help="Optimality tolerance relative to scaled operator Frobenius norm and force norm")
     args = ap.parse_args()
 
     metadata = {}
@@ -126,10 +130,16 @@ def main():
     # The range calculation below enforces the production fixed-pressure values.
     yl_abs = ldnorm(F + direct)
     yl_rel = yl_abs / f_norm
+    pressure_norm = ldnorm(direct)
+    yl_rel_maxnorm = yl_abs / max(f_norm, pressure_norm)
 
-    free = np.array([dofs[col][1] > 1.5 for col in pressure_cols], dtype=bool)
-    fixed_val = np.array([0. if free[j] else dofs[col][2]
-                          for j, col in enumerate(pressure_cols)], dtype=float)
+    if args.unconstrained_pressure:
+        free = np.ones(len(pressure_cols), dtype=bool)
+        fixed_val = np.zeros(len(pressure_cols), dtype=float)
+    else:
+        free = np.array([dofs[col][1] > 1.5 for col in pressure_cols], dtype=bool)
+        fixed_val = np.array([0. if free[j] else dofs[col][2]
+                              for j, col in enumerate(pressure_cols)], dtype=float)
     G_free = G[:, free].tocsr()
     rhs = -F.astype(float) - G @ fixed_val
     colnorm = np.sqrt(np.asarray(G_free.power(2).sum(axis=0)).ravel())
@@ -152,6 +162,13 @@ def main():
 
     # Optimality on the scaled least-squares problem.
     normal = ldnorm(A.T @ np.asarray(residual, dtype=float))
+    a_frobenius = float(np.sqrt(np.sum(A.data*A.data)))
+    normal_scale = a_frobenius * f_norm
+    normal_relative = normal / max(normal_scale, np.finfo(float).tiny)
+    if not np.isfinite(normal_relative) or normal_relative > args.normal_rtol:
+        raise RuntimeError(
+            f"LSMR optimality check failed: scaled normal residual {normal_relative:.3e} "
+            f"exceeds {args.normal_rtol:.3e}")
     rzero = np.random.default_rng(12345).standard_normal(len(ri))
     neg = lsmr(A, -rzero, atol=0, btol=0, conlim=1e15, maxiter=args.maxiter)
     if neg[1] in (3, 6, 7):
@@ -165,13 +182,15 @@ def main():
     result = {
         "status": "converged", "free_velocity_dofs": len(ri),
         "pressure_dofs_total": len(ci), "active_pressure_dofs": len(active),
-        "surface_norm": f_norm,
+        "surface_norm": f_norm, "pressure_norm": pressure_norm,
+        "pressure_space": "standalone_unconstrained" if args.unconstrained_pressure else "production_constrained",
         "prescribed_absolute": yl_abs, "prescribed_relative": yl_rel,
+        "prescribed_relative_maxnorm": yl_rel_maxnorm,
         "range_absolute": range_abs, "range_relative": range_rel,
         "pressure_action_mismatch": pressure_mismatch,
         "pressure_action_mismatch_relative": action_relative,
         "lsmr_iterations": int(fit[2]), "lsmr_stop": int(fit[1]),
-        "normal_residual": normal,
+        "normal_residual": normal, "normal_residual_relative": normal_relative,
         "negative_control_relative": neg_rel,
         "metadata": metadata,
     }

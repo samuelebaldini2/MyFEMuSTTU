@@ -27,14 +27,19 @@ public:
     open(action_, prefix + "_action" + suffix, "row,value\n");
     open(dofs_,   prefix + "_dofs"   + suffix, "sys_dof,field,bdc,fixed_value\n");
     if (rank == 0) {
-      std::ofstream meta(prefix + "_meta.csv", std::ios::trunc);
-      if (!meta) throw std::runtime_error("Cannot write surface range metadata");
-      meta << "key,value\n"
-           << "dim," << dim << '\n'
-           << "pressure_jump," << std::setprecision(17) << pressureJump << '\n'
-           << "surface_weights," << surfaceWeights << '\n';
+      meta_.open(prefix + "_meta.csv", std::ios::trunc);
+      if (!meta_) throw std::runtime_error("Cannot write surface range metadata");
+      meta_ << std::setprecision(17) << "key,value\n"
+            << "dim," << dim << '\n'
+            << "pressure_jump," << pressureJump << '\n'
+            << "surface_weights," << surfaceWeights << '\n';
     }
     capturing_ = true;
+  }
+
+  void AddMetadata(const std::string& key, const std::string& value) {
+    requireCapturing();
+    if(meta_.is_open()) meta_ << key << ',' << value << '\n';
   }
 
   bool IsCapturing() const noexcept { return capturing_; }
@@ -87,6 +92,7 @@ public:
   void FinalizeAssembly() {
     requireCapturing();
     bt_.close(); force_.close(); action_.close(); dofs_.close();
+    if(meta_.is_open()) meta_.close();
     capturing_ = false;
     complete_ = true;
   }
@@ -103,7 +109,7 @@ private:
       throw std::logic_error("Surface range diagnostic is not capturing");
     }
   }
-  std::ofstream bt_, force_, action_, dofs_;
+  std::ofstream bt_, force_, action_, dofs_, meta_;
   double pressureJump_ = 0.;
   bool capturing_ = false;
   bool complete_ = false;

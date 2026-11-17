@@ -53,7 +53,7 @@ if [[ "${SURFACE_STANDALONE_MATCH}" == "1" ]]; then
   DEFAULT_FIT_PRECISION=quad
   DEFAULT_GK_RULE=15/31
   DEFAULT_PROJECT_Q1=1
-  DEFAULT_NORMAL_FIRST=1
+  if [[ "${SURFACE_WEIGHTS}" == "3" ]]; then DEFAULT_NORMAL_FIRST=1; else DEFAULT_NORMAL_FIRST=0; fi
   DEFAULT_UNCONSTRAINED=1
   DEFAULT_STRICT_WARNINGS=1
   DEFAULT_EXTENDED_BUDGET=1
@@ -439,11 +439,13 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --surface-pressure-prefix "${DIAG_PREFIX}" \
 
       if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" ]]; then
-
+        ANALYSIS_ARGS=()
+        if [[ "${SURFACE_UNCONSTRAINED_PRESSURE}" == "1" ]]; then
+          ANALYSIS_ARGS+=(--unconstrained-pressure)
+        fi
         OPENBLAS_NUM_THREADS=1 python3 \
           "${SOURCE_SCRIPT_DIR}/diagnostic/solve_surface_pressure_range.py" \
-          "${DIAG_PREFIX}"
-
+          "${DIAG_PREFIX}" "${ANALYSIS_ARGS[@]}"
       fi
 
       echo

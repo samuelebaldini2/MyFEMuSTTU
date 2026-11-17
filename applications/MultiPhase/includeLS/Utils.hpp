@@ -4287,7 +4287,7 @@ SimulationConfig GetSimulationConfig(const SimulationCase simulation, const unsi
       cfg.psi.type = PsiType::BALL;
       cfg.psi.center = {0.005, 0.005, 0.005};
       cfg.psi.center.resize(dim);
-      cfg.psi.radius = 0.004;
+      cfg.psi.radius = 0.002;
 
       cfg.properties.rho1 = 300.;
       cfg.properties.rho2 = 300.;

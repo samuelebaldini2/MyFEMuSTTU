@@ -22,6 +22,8 @@
 #include "MyMatrix.hpp"
 #include "VTKWriter.hpp"
 
+#include "SurfacePressureRangeDiagnostic.hpp"
+
 // #include <gperftools/profiler.h>
 
 using namespace femus;
@@ -52,6 +54,89 @@ bool printdb = false;
 std::vector<std::vector<std::vector < std::vector < std::pair < unsigned, double> > > > > PMatrix(6); //projection matrix between elements;
 
 CutFemIntegration cutFemIntegration;
+
+namespace {
+
+SurfacePressureRangeDiagnostic* activeSurfaceRange = nullptr;
+
+class SurfaceRangeCaptureGuard {
+public:
+  explicit SurfaceRangeCaptureGuard(
+    SurfacePressureRangeDiagnostic& diagnostic) {
+
+    if (activeSurfaceRange != nullptr) {
+      throw std::logic_error(
+        "Surface range diagnostic capture already active");
+    }
+
+    activeSurfaceRange = &diagnostic;
+  }
+
+  ~SurfaceRangeCaptureGuard() {
+    activeSurfaceRange = nullptr;
+  }
+
+  SurfaceRangeCaptureGuard(const SurfaceRangeCaptureGuard&) = delete;
+
+  SurfaceRangeCaptureGuard& operator=(
+    const SurfaceRangeCaptureGuard&) = delete;
+};
+
+void ExportSurfacePressureDofs(
+    SurfacePressureRangeDiagnostic& diagnostic,
+    MultiLevelSolution& mlSol,
+    TransientNonlinearImplicitSystem& system,
+    unsigned level,
+    unsigned dim) {
+
+  Solution* solution = mlSol.GetSolutionLevel(level);
+
+  LinearEquationSolver* linear = system._LinSolver[level];
+
+  const char* velocityNames[] = {"U", "V", "W"};
+  const char* pressureNames[] = {"P1", "P2"};
+
+  for (unsigned field = 0; field < dim + 2; ++field) {
+
+    const char* name =
+      field < dim
+        ? velocityNames[field]
+        : pressureNames[field-dim];
+
+    const unsigned solIndex = mlSol.GetIndex(name);
+
+    const unsigned pdeIndex = system.GetSolPdeIndex(name);
+
+    NumericVector* vector = solution->_Sol[solIndex];
+
+    NumericVector* bdcVector = solution->_Bdc[solIndex];
+
+    for (unsigned dof = vector->first_local_index();
+         dof < vector->last_local_index();
+         ++dof) {
+
+      const unsigned systemDof =
+        linear->GetSystemDof(solIndex, pdeIndex, dof);
+
+      const double bdc = (*bdcVector)(dof);
+
+      // FEMuS: 2 = free, 1 = AMR constrained, 0 = Dirichlet.
+      const double fixedValue =
+        bdc > 1.5 || (bdc > 0.5 && bdc < 1.5)
+          ? 0.0
+          : (*vector)(dof);
+
+      diagnostic.AddDof(
+        systemDof,
+        name,
+        bdc,
+        fixedValue
+      );
+    }
+  }
+}
+
+} // namespace
 
 struct TaylorHood {
   struct Variable {
@@ -143,6 +228,9 @@ int main(int argc, char **argv) {
 
   SimulationArgs args;
 
+  bool surfacePressureEnabled = false;
+  std::string surfacePressurePrefix;
+
   try {
     for(int i = 1; i < argc; ++i) {
       const std::string option = argv[i];
@@ -160,10 +248,29 @@ int main(int argc, char **argv) {
         if(value != "1" && value != "3") throw std::invalid_argument("Surface RHS weights must be 1 (legacy) or 3.");
         surfaceWeightCount = value == "1" ? 1U : 3U;
       }
+      if (option == "--surface-pressure-diagnostic") {
+        if (i + 1 >= argc) throw std::invalid_argument("Missing --surface-pressure-diagnostic value");
+        const std::string value = argv[++i];
+        if (value != "0" && value != "1") throw std::invalid_argument("--surface-pressure-diagnostic must be 0 or 1");
+        surfacePressureEnabled = (value == "1");
+      }
+      if (option == "--surface-pressure-prefix") {
+        if (i + 1 >= argc) throw std::invalid_argument("Missing --surface-pressure-prefix value");
+        surfacePressurePrefix = argv[++i];
+        if (surfacePressurePrefix.empty()) throw std::invalid_argument("Empty surface-pressure-prefix");
+      }
       if(option == "--help" || option == "-h") std::cout << "  --surface-moment-order Q    Surface moment degree, 1..18 (default 13)\n  --surface-weights 1|3       3D surface RHS weights: 1 legacy, 3 component weights (default 3)\n" << FELevelSetMoments::GaussKronrodRules::Help();
     }
     surfaceQuadratureRules = FELevelSetMoments::OuterQuadratureRules::ParseArguments(argc,argv);
     args = ParseSimulationArgs(argc,argv,CutFemIntegration::Quadratic);
+
+    if (surfacePressureEnabled && args.simulation != SimulationCase::PAR) {
+      throw std::invalid_argument("Surface-pressure diagnostic is available only for par");
+    }
+
+    if (surfacePressureEnabled && (args.symmetric || args.axisymmetric)) {
+      throw std::invalid_argument("Surface-pressure diagnostic initially supports Cartesian nonsymmetric PAR only");
+    }
   }
   catch (const std::exception& e) {
 
@@ -550,7 +657,7 @@ int main(int argc, char **argv) {
         std::ofstream(bbOutputPrefix + "_droplets.dat", std::ios::trunc).close();
       }
 
-      for (unsigned t = 1; t <= 1 + nSteps; t++) {
+      for (unsigned t = 1; t <= 1 + 0*nSteps; t++) {
 
         std::cout << "==============================================\n";
         std::cout << "  ITERATION " << t << std::endl;
@@ -805,7 +912,41 @@ int main(int argc, char **argv) {
         }
 
         //system2.MGsolve();
-        system2.Solve();
+        // system2.Solve();
+
+        if (surfacePressureEnabled && t == 1) {
+
+          if (iproc == 0) {
+            mkdir("levelsetdiagnostic", 0755);
+            mkdir("levelsetdiagnostic/surface_pressure", 0755);
+          }
+
+          MPI_Barrier(MPI_COMM_WORLD);
+
+          const std::string prefix = surfacePressurePrefix.empty() 
+              ? "levelsetdiagnostic/surface_pressure/range_LC" + std::to_string(levelC) +"_LF" + std::to_string(levelF) + "_NS" + std::to_string(nSteps)
+              : surfacePressurePrefix;
+
+          const double pressureJump = (dim == 3 ? 2.0 : 1.0) * properties.sigma / cfg.psi.radius;
+
+          SurfacePressureRangeDiagnostic surfaceRange;
+
+          surfaceRange.Begin(prefix, iproc, dim, pressureJump, surfaceWeightCount);
+
+          ExportSurfacePressureDofs(surfaceRange, mlSol2, system2, levelC - level0, dim);
+
+          {
+            SurfaceRangeCaptureGuard captureGuard(surfaceRange);
+            system2.Solve();
+          }
+
+          if (!surfaceRange.IsComplete()) {
+            throw std::runtime_error("Surface-pressure diagnostic did not capture the finest NS assembly");
+          }
+        }
+        else {
+          system2.Solve();
+        }
 
         // *Sol0_C[c0Index] = *originalC;
 
@@ -1111,6 +1252,8 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
 
   const bool firstNonlinearIt = (mlPdeSys->GetNonlinearIt() == 0);
 
+  const bool captureSurfaceRange = activeSurfaceRange != nullptr && activeSurfaceRange->IsCapturing() && levelToAssemble == levelC - level0 && firstNonlinearIt;
+
   // Stuff to be taken/used from levelC to levelF from mlsol0
   MultiLevelSolution*  mlSol0  = static_cast<MultiLevelSolution*>(mParam.extProblem);  // pointer to the multilevelF solution object
   unsigned cIndex = mlSol0->GetIndex("C");
@@ -1398,6 +1541,14 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
         sysDof.resize(nDofsVP);
         Res.assign(nDofsVP, 0.);
         Jac.assign(nDofsVP * nDofsVP, 0.);
+
+        std::vector<double> surfaceResidual;
+        std::vector<double> pressureActionYL;
+
+        if (captureSurfaceRange) {
+          surfaceResidual.assign(dim * nDofsV, 0.0);
+          pressureActionYL.assign(dim * nDofsV, 0.0);
+        }
 
         for(unsigned  d = 0; d < dim; d++) {
           solV[d].resize(nDofsV);
@@ -1805,20 +1956,64 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
                 weightedDivPhi += phiV[i];
               }
 
+              if (captureSurfaceRange) {
+                pressureActionYL[I*nDofsV+i] += activeSurfaceRange->PressureJump() * weightedDivPhi * weight * weightCFInt[ig];
+              }
+
               NSV += - weightedDivPhi * (solP1_gss * weightCFInt[ig] + solP2_gss * weightCFExt[ig]) * weight;  // pressure gradient
               NSV += - rho * phiV[i] * g[I] * weight * axisWeight; // gravity term
 
               Res[I * nDofsV + i] -=  NSV;
 
+              if (cut == 1) {
+
+                double fSigma = 0.0;
+
+                if (tangentialSurfaceWeights && dim == 3 && surfaceWeightCount == 3) {
+                  fSigma = -sigma * elementSurfaceRule->GetGaussWeightPointer()[ig] *
+                    (
+                      weightCFNormal[(I+1U)%3U][ig] *
+                      surfaceTangent[3U*i+(I+2U)%3U]
+                      -
+                      weightCFNormal[(I+2U)%3U][ig] *
+                      surfaceTangent[3U*i+(I+1U)%3U]
+                    );
+                }
+                else if (tangentialSurfaceWeights) {
+                  fSigma = -sigma * surfaceForce[i*dim+I] * surfaceWeight;
+                }
+                else {
+                  for (unsigned d = 0; d < dim; ++d) {
+                    fSigma -= sigma * axisWeight * P[I][d] * phiV_x[i*dim+d] * surfaceWeight;
+                  }
+                }
+
+                if (axisymmetric && I == 0) {
+                  fSigma -= sigma * phiV[i] * surfaceWeight;
+                }
+
+                const unsigned row = I*nDofsV+i;
+
+                // Original production residual.
+                Res[row] += fSigma;
+
+                // Independent diagnostic accumulation.
+                if (captureSurfaceRange) {
+                  surfaceResidual[row] += fSigma;
+                }
+
+                // Keep the existing stabilization calculations below.
+              }
+
               // surface tension stabilization -- rhs contribution
               if(cut == 1) {
-                if(tangentialSurfaceWeights && dim == 3 && surfaceWeightCount == 3) Res[I*nDofsV+i] -= sigma*elementSurfaceRule->GetGaussWeightPointer()[ig]*(weightCFNormal[(I+1U)%3U][ig]*surfaceTangent[3U*i+(I+2U)%3U]-weightCFNormal[(I+2U)%3U][ig]*surfaceTangent[3U*i+(I+1U)%3U]);
-                else if(tangentialSurfaceWeights) Res[I*nDofsV+i] -= sigma*surfaceForce[i*dim+I]*surfaceWeight;
-                else for(unsigned d = 0; d < dim; ++d) Res[I*nDofsV+i] -= sigma*axisWeight*P[I][d]*phiV_x[i*dim+d]*surfaceWeight;
+                // if(tangentialSurfaceWeights && dim == 3 && surfaceWeightCount == 3) Res[I*nDofsV+i] -= sigma*elementSurfaceRule->GetGaussWeightPointer()[ig]*(weightCFNormal[(I+1U)%3U][ig]*surfaceTangent[3U*i+(I+2U)%3U]-weightCFNormal[(I+2U)%3U][ig]*surfaceTangent[3U*i+(I+1U)%3U]);
+                // else if(tangentialSurfaceWeights) Res[I*nDofsV+i] -= sigma*surfaceForce[i*dim+I]*surfaceWeight;
+                // else for(unsigned d = 0; d < dim; ++d) Res[I*nDofsV+i] -= sigma*axisWeight*P[I][d]*phiV_x[i*dim+d]*surfaceWeight;
 
-                if(axisymmetric && I == 0) {
-                  Res[I * nDofsV + i] += -sigma * phiV[i] * surfaceWeight;
-                }
+                // if(axisymmetric && I == 0) {
+                //   Res[I * nDofsV + i] += -sigma * phiV[i] * surfaceWeight;
+                // }
 
                 double stabSF = 0.0;
 
@@ -1988,6 +2183,22 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
           //   }
           // }
 
+        }
+
+        if (captureSurfaceRange) {
+
+          const unsigned nV = dim * nDofsV;
+          const unsigned nP = 2 * nDofsP;
+
+          std::vector<double> pressureOperator(nV * nP, 0.0);
+
+          for (unsigned row = 0; row < nV; ++row) {
+            for (unsigned col = 0; col < nP; ++col) {
+              pressureOperator[row*nP+col] = -Jac[row*nDofsVP + nV + col];
+            }
+          }
+
+          activeSurfaceRange->AddElement(sysDof, nV, nP, surfaceResidual, pressureOperator, pressureActionYL);
         }
 
         RES->add_vector_blocked(Res, sysDof);
@@ -2317,6 +2528,10 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
 
   RES->close();
   KK->close();
+
+  if (captureSurfaceRange) {
+    activeSurfaceRange->FinalizeAssembly();
+  }
 
   std::cout << "Matrix Assembly time        = " << static_cast<double>(clock() - start_time) / CLOCKS_PER_SEC << std::flush << std::endl;
 

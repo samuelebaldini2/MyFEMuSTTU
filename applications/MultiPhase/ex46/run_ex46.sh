@@ -22,6 +22,8 @@ SIMULATION="par"
 SYMMETRIC=0
 AXISYMMETRIC=0
 
+SURFACE_PRESSURE_DIAGNOSTIC=1
+
 # ------------------------------------------------------------
 # Grid configurations
 # ------------------------------------------------------------
@@ -42,7 +44,7 @@ NSTEPS=(1000)
 # ------------------------------------------------------------
 
 CUTFEM_INTEGRATION="quadratic"     # linear | quadratic
-SURFACE_MOMENT_ORDER=13
+SURFACE_MOMENT_ORDER=10
 SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}" # 1: legacy scalar weight; 3: component RHS weights
 
 # ------------------------------------------------------------
@@ -70,6 +72,22 @@ OPTIONS_LEFT=true
 # ============================================================
 # Basic checks
 # ============================================================
+
+SOURCE_SCRIPT_DIR="$(
+  dirname "$(readlink -f "${BASH_SOURCE[0]}")"
+)"
+
+if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" != "0" &&
+      "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
+  echo "ERROR: SURFACE_PRESSURE_DIAGNOSTIC must be 0 or 1."
+  exit 1
+fi
+
+if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" &&
+      "${SIMULATION}" != "par" ]]; then
+  echo "ERROR: Surface-pressure diagnostic is only for par."
+  exit 1
+fi
 
 if [[ "${SURFACE_WEIGHTS}" != "1" && "${SURFACE_WEIGHTS}" != "3" ]]; then
   echo "ERROR: SURFACE_WEIGHTS must be 1 or 3."
@@ -318,6 +336,12 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
       echo "============================================================"
       echo
 
+      DIAG_PREFIX="levelsetdiagnostic/surface_pressure/par_U${uniform_levels}_A${adaptive_levels}_NS${nsteps}_W${SURFACE_WEIGHTS}_RUN${RUN_INDEX}"
+
+      if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" ]]; then
+        mkdir -p "$(dirname "${DIAG_PREFIX}")"
+      fi
+
       mpirun -n "${NPROC}" \
         "${EXECUTABLE}" \
         "${PETSC_OPTIONS[@]}" \
@@ -335,7 +359,17 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --symmetric "${SYMMETRIC}" \
         --axisymmetric "${AXISYMMETRIC}" \
         --nprint "${NPRINT}" \
-        --nreinit "${NREINIT}"  
+        --nreinit "${NREINIT}" \
+        --surface-pressure-diagnostic "${SURFACE_PRESSURE_DIAGNOSTIC}" \
+        --surface-pressure-prefix "${DIAG_PREFIX}" \
+
+      if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" ]]; then
+
+        OPENBLAS_NUM_THREADS=1 python3 \
+          "${SOURCE_SCRIPT_DIR}/diagnostic/solve_surface_pressure_range.py" \
+          "${DIAG_PREFIX}"
+
+      fi
 
       echo
 

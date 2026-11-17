@@ -59,7 +59,10 @@ unsigned surfaceMomentOrder = 13;
 unsigned surfaceWeightCount = 3;
 FELevelSetMoments::OuterQuadratureRules surfaceQuadratureRules;
 std::unique_ptr<Fem> surfaceFem;
-std::unique_ptr<CutFemWeightRules_LS<TypeIO,TypeA>> surfaceRules;
+// std::unique_ptr<CutFemWeightRules_LS<TypeIO,TypeA>> surfaceRules;
+using SurfaceFitPrecision = cpp_bin_float_quad;
+
+std::unique_ptr<CutFemWeightRules_LS<TypeIO, SurfaceFitPrecision>> surfaceRules;
 
 // Initializes only mesh element types, before any assembly, and keeps the selected profile fixed.
 void InitializeSurfaceQuadrature(Mesh& mesh) {
@@ -73,7 +76,8 @@ void InitializeSurfaceQuadrature(Mesh& mesh) {
   MPI_Allreduce(localGeometry,globalGeometry,6,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
   std::vector<GeomElType> geometries;
   for(unsigned geometry = 0; geometry < 6; ++geometry) if(globalGeometry[geometry]) geometries.push_back(static_cast<GeomElType>(geometry));
-  surfaceRules.reset(new CutFemWeightRules_LS<TypeIO,TypeA>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
+  // surfaceRules.reset(new CutFemWeightRules_LS<TypeIO,TypeA>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
+  surfaceRules.reset(new CutFemWeightRules_LS<TypeIO, SurfaceFitPrecision>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
   surfaceFem.reset(new Fem(2U*surfaceMomentOrder,mesh.GetDimension()));
 }
 

@@ -46,6 +46,9 @@ NSTEPS=(1000)
 CUTFEM_INTEGRATION="quadratic"     # linear | quadratic
 SURFACE_MOMENT_ORDER=10
 SURFACE_WEIGHTS="${SURFACE_WEIGHTS:-3}" # 1: legacy scalar weight; 3: component RHS weights
+SURFACE_MOMENT_TOL=1.e-8
+SURFACE_GK="15/31"
+SURFACE_EXTENDED_BUDGET=1
 
 # ------------------------------------------------------------
 # Velocity multigrid
@@ -342,6 +345,12 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         mkdir -p "$(dirname "${DIAG_PREFIX}")"
       fi
 
+      if [[ "${SURFACE_EXTENDED_BUDGET}" == "1" ]]; then
+        export FEMUS_CUTFEM_UNLIMITED=1
+      else
+        unset FEMUS_CUTFEM_UNLIMITED
+      fi
+
       mpirun -n "${NPROC}" \
         "${EXECUTABLE}" \
         "${PETSC_OPTIONS[@]}" \
@@ -352,7 +361,12 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --level-offset-psi "${LEVEL_OFFSET_PSI}" \
         --cutfem-integration "${CUTFEM_INTEGRATION}" \
         --surface-moment-order "${SURFACE_MOMENT_ORDER}" \
+        --surface-moment-tolerance "${SURFACE_MOMENT_TOL}" \
         --surface-weights "${SURFACE_WEIGHTS}" \
+        --gk-regular-2d "${SURFACE_GK}" \
+        --gk-tangent-2d "${SURFACE_GK}" \
+        --gk-regular-3d "${SURFACE_GK}" \
+        --gk-tangent-3d "${SURFACE_GK}" \
         --nsteps "${nsteps}" \
         --dim "${DIM}" \
         --simulation "${SIMULATION}" \

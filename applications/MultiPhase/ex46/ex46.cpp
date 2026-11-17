@@ -1083,7 +1083,11 @@ int main(int argc, char **argv) {
 
           surfaceRange.Begin(prefix, iproc, dim, pressureJump, surfaceWeightCount);
           surfaceRange.AddMetadata("moment_order",std::to_string(surfaceMomentOrder));
-          surfaceRange.AddMetadata("moment_tolerance",std::to_string(surfaceMomentTolerance));
+          {
+            std::ostringstream toleranceValue;
+            toleranceValue << std::setprecision(17) << surfaceMomentTolerance;
+            surfaceRange.AddMetadata("moment_tolerance",toleranceValue.str());
+          }
           surfaceRange.AddMetadata("fit_quad",surfaceFitQuad ? "1" : "0");
           surfaceRange.AddMetadata("geometry_project_q1",surfacePressureProjectQ1 ? "1" : "0");
           surfaceRange.AddMetadata("normal_first",surfaceNormalFirst ? "1" : "0");

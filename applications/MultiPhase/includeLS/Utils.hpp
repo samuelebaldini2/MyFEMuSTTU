@@ -57,14 +57,22 @@ Fem fem = Fem(hex.GetGaussQuadratureOrder(), hex.GetDimension());
 
 unsigned surfaceMomentOrder = 13;
 unsigned surfaceWeightCount = 3;
+double surfaceMomentTolerance = 1.e-8;
+bool surfaceFitQuad = false;
+bool surfaceNormalFirst = false;
+bool surfaceStrictWarnings = false;
 FELevelSetMoments::OuterQuadratureRules surfaceQuadratureRules;
 std::unique_ptr<Fem> surfaceFem;
 std::unique_ptr<CutFemWeightRules_LS<TypeIO,TypeA>> surfaceRules;
+std::unique_ptr<CutFemWeightRules_LS<TypeIO,boost::multiprecision::cpp_bin_float_quad>> surfaceRulesQuad;
 
 // Initializes only mesh element types, before any assembly, and keeps the selected profile fixed.
 void InitializeSurfaceQuadrature(Mesh& mesh) {
-  if(surfaceRules) {
-    if(surfaceRules->GetOrder() != surfaceMomentOrder || !surfaceRules->GetOuterRules().SameAs(surfaceQuadratureRules)) throw std::logic_error("The initialized surface quadrature profile cannot change during assembly.");
+  if(surfaceRules || surfaceRulesQuad) {
+    const bool matching = surfaceFitQuad
+      ? (surfaceRulesQuad && surfaceRulesQuad->GetOrder() == surfaceMomentOrder && surfaceRulesQuad->GetOuterRules().SameAs(surfaceQuadratureRules))
+      : (surfaceRules && surfaceRules->GetOrder() == surfaceMomentOrder && surfaceRules->GetOuterRules().SameAs(surfaceQuadratureRules));
+    if(!matching) throw std::logic_error("The initialized surface quadrature profile cannot change during assembly.");
     return;
   }
   int localGeometry[6] = {}, globalGeometry[6] = {};
@@ -73,7 +81,12 @@ void InitializeSurfaceQuadrature(Mesh& mesh) {
   MPI_Allreduce(localGeometry,globalGeometry,6,MPI_INT,MPI_MAX,MPI_COMM_WORLD);
   std::vector<GeomElType> geometries;
   for(unsigned geometry = 0; geometry < 6; ++geometry) if(globalGeometry[geometry]) geometries.push_back(static_cast<GeomElType>(geometry));
-  surfaceRules.reset(new CutFemWeightRules_LS<TypeIO,TypeA>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
+  if(surfaceFitQuad) {
+    surfaceRulesQuad.reset(new CutFemWeightRules_LS<TypeIO,boost::multiprecision::cpp_bin_float_quad>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
+  }
+  else {
+    surfaceRules.reset(new CutFemWeightRules_LS<TypeIO,TypeA>(surfaceMomentOrder,geometries,surfaceQuadratureRules));
+  }
   surfaceFem.reset(new Fem(2U*surfaceMomentOrder,mesh.GetDimension()));
 }
 

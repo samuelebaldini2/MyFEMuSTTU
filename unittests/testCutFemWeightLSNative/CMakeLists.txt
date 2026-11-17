@@ -34,3 +34,6 @@ target_link_libraries(cutfem_outer_interval_benchmark PRIVATE cutfem_native_supp
 
 add_executable(cutfem_surface_reuse_benchmark benchmark_surface_reuse.cpp)
 target_link_libraries(cutfem_surface_reuse_benchmark PRIVATE cutfem_native_support)
+
+add_executable(cutfem_surface_range surface_range.cpp)
+target_link_libraries(cutfem_surface_range PRIVATE cutfem_native_support)

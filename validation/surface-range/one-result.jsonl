@@ -1,0 +1,3 @@
+{"stage": "assembly", "free_dofs": 18405, "active_pressure_dofs": 1068, "surface_norm": 0.43005709725934543, "pressure_mismatch": 2.861500041455819e-15, "gauge_norm": 3.688686236221099e-16, "prescribed_relative": 9.815005105233391e-15}
+{"stage": "range", "absolute": 3.952134724573427e-15, "relative": 9.189790727230102e-15, "iterations": 483, "stop": 5, "normal_residual": 1.089457470230551e-29}
+{"stage": "negative_control", "relative": 0.9715449212188259, "iterations": 268}

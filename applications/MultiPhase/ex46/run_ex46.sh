@@ -49,12 +49,22 @@ SURFACE_REFERENCE_PROFILE="${SURFACE_REFERENCE_PROFILE:-0}"   # 0: production, 1
 if [[ "${SURFACE_REFERENCE_PROFILE}" == "1" ]]; then
   SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-$([[ "${SURFACE_WEIGHTS:-3}" == "1" ]] && echo 17 || echo 10)}"
   SURFACE_MOMENT_TOL="${SURFACE_MOMENT_TOL:-1e-12}"
+  SURFACE_FIT_PRECISION="${SURFACE_FIT_PRECISION:-quad}"
+  SURFACE_PROJECT_Q1="${SURFACE_PROJECT_Q1:-1}"
+  SURFACE_NORMAL_FIRST="${SURFACE_NORMAL_FIRST:-$([[ "${SURFACE_WEIGHTS}" == "3" ]] && echo 1 || echo 0)}"
+  SURFACE_UNCONSTRAINED="${SURFACE_UNCONSTRAINED:-1}"
+  SURFACE_PRESSURE_ONLY="${SURFACE_PRESSURE_ONLY:-1}"
   SURFACE_GK="${SURFACE_GK:-15/31}"
   SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-1}"
   SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-1}"
 else
   SURFACE_MOMENT_ORDER="${SURFACE_MOMENT_ORDER:-10}"
   SURFACE_MOMENT_TOL="${SURFACE_MOMENT_TOL:-1e-8}"
+  SURFACE_FIT_PRECISION="${SURFACE_FIT_PRECISION:-long-double}"
+  SURFACE_PROJECT_Q1="${SURFACE_PROJECT_Q1:-0}"
+  SURFACE_NORMAL_FIRST="${SURFACE_NORMAL_FIRST:-0}"
+  SURFACE_UNCONSTRAINED="${SURFACE_UNCONSTRAINED:-0}"
+  SURFACE_PRESSURE_ONLY="${SURFACE_PRESSURE_ONLY:-0}"
   SURFACE_GK="${SURFACE_GK:-7/15}"
   SURFACE_EXTENDED_BUDGET="${SURFACE_EXTENDED_BUDGET:-0}"
   SURFACE_STRICT_WARNINGS="${SURFACE_STRICT_WARNINGS:-0}"
@@ -91,7 +101,7 @@ SOURCE_SCRIPT_DIR="$(
   dirname "$(readlink -f "${BASH_SOURCE[0]}")"
 )"
 
-for variable in SURFACE_REFERENCE_PROFILE SURFACE_EXTENDED_BUDGET SURFACE_STRICT_WARNINGS; do
+for variable in SURFACE_REFERENCE_PROFILE SURFACE_EXTENDED_BUDGET SURFACE_STRICT_WARNINGS SURFACE_PROJECT_Q1 SURFACE_NORMAL_FIRST SURFACE_UNCONSTRAINED SURFACE_PRESSURE_ONLY; do
   if [[ "${!variable}" != "0" && "${!variable}" != "1" ]]; then
     echo "ERROR: $variable must be 0 or 1" >&2; exit 1
   fi
@@ -99,6 +109,10 @@ done
 if [[ "${SURFACE_REFERENCE_PROFILE}" == "1" && "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
   echo "ERROR: SURFACE_REFERENCE_PROFILE requires SURFACE_PRESSURE_DIAGNOSTIC=1" >&2; exit 1
 fi
+if [[ "${SURFACE_FIT_PRECISION}" != "quad" && "${SURFACE_FIT_PRECISION}" != "long-double" ]]; then
+  echo "ERROR: SURFACE_FIT_PRECISION must be quad or long-double" >&2; exit 1
+fi
+
 if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" != "0" &&
       "${SURFACE_PRESSURE_DIAGNOSTIC}" != "1" ]]; then
   echo "ERROR: SURFACE_PRESSURE_DIAGNOSTIC must be 0 or 1."
@@ -352,6 +366,9 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
       echo "Reference profile  : ${SURFACE_REFERENCE_PROFILE}"
       echo "Moment tolerance   : ${SURFACE_MOMENT_TOL}"
       echo "Moment order / GK  : ${SURFACE_MOMENT_ORDER} / ${SURFACE_GK}"
+      echo "Fit / geometry     : ${SURFACE_FIT_PRECISION} / Q1=${SURFACE_PROJECT_Q1}"
+      echo "Normal first       : ${SURFACE_NORMAL_FIRST}"
+      echo "Pressure all cols  : ${SURFACE_UNCONSTRAINED}"
       echo "Solver levels      : ${NLEVELS}"
       echo "Number of steps    : ${nsteps}"
       echo "Dimension          : ${DIM}"
@@ -381,6 +398,11 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
         --surface-moment-order "${SURFACE_MOMENT_ORDER}" \
         --surface-weights "${SURFACE_WEIGHTS}" \
         --surface-moment-tolerance "${SURFACE_MOMENT_TOL}" \
+        --surface-fit-precision "${SURFACE_FIT_PRECISION}" \
+        --surface-pressure-project-q1 "${SURFACE_PROJECT_Q1}" \
+        --surface-pressure-normal-first "${SURFACE_NORMAL_FIRST}" \
+        --surface-pressure-unconstrained "${SURFACE_UNCONSTRAINED}" \
+        --surface-pressure-only "${SURFACE_PRESSURE_ONLY}" \
         --surface-strict-warnings "${SURFACE_STRICT_WARNINGS}" \
         --gk-regular-2d "${SURFACE_GK}" \
         --gk-tangent-2d "${SURFACE_GK}" \
@@ -398,9 +420,13 @@ for uniform_levels in "${UNIFORM_LEVELS[@]}"; do
 
       if [[ "${SURFACE_PRESSURE_DIAGNOSTIC}" == "1" ]]; then
 
+        ANALYSIS_ARGS=()
+        if [[ "${SURFACE_UNCONSTRAINED}" == "1" ]]; then
+          ANALYSIS_ARGS+=(--unconstrained-pressure)
+        fi
         OPENBLAS_NUM_THREADS=1 python3 \
           "${SOURCE_SCRIPT_DIR}/diagnostic/solve_surface_pressure_range.py" \
-          "${DIAG_PREFIX}"
+          "${DIAG_PREFIX}" "${ANALYSIS_ARGS[@]}"
 
       fi
 

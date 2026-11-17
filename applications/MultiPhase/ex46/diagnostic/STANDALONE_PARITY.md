@@ -8,16 +8,16 @@ In `run_ex46.sh`, set:
 
 ```bash
 SURFACE_PRESSURE_DIAGNOSTIC=1
-SURFACE_STANDALONE_MATCH=1
+SURFACE_REFERENCE_PROFILE=1
 SURFACE_WEIGHTS=3   # 3 for normal moments (q=10), 1 for scalar (q=17)
 NPROC=1             # first validation; then compare with NPROC=2,8
 ```
 
 The standalone parity profile sets the moment order to 10 for three weights, or 17 for one weight; tolerance 1e-12; quad-precision moment-to-weight fitting but double output weights; all four outer GK rules to 15/31; a trilinear Q1 projection of the loaded HEX27 geometry before refinement; three-normal-moment first call order; extended endpoint budget; strict warning rejection; unconstrained pressure-space postprocessing; and diagnostic-only termination after the initial NS solve.
 
-These defaults are individually overridable via `SURFACE_MOMENT_ORDER`, `SURFACE_MOMENT_TOL`, `SURFACE_FIT_PRECISION`, `SURFACE_GK_RULE`, `SURFACE_PROJECT_Q1`, `SURFACE_NORMAL_FIRST`, `SURFACE_UNCONSTRAINED_PRESSURE`, `SURFACE_STRICT_WARNINGS`, `SURFACE_EXTENDED_BUDGET`, and `SURFACE_PRESSURE_ONLY`.
+These defaults are individually overridable via `SURFACE_MOMENT_ORDER`, `SURFACE_MOMENT_TOL`, `SURFACE_FIT_PRECISION`, `SURFACE_GK`, `SURFACE_PROJECT_Q1`, `SURFACE_NORMAL_FIRST`, `SURFACE_UNCONSTRAINED`, `SURFACE_STRICT_WARNINGS`, `SURFACE_EXTENDED_BUDGET`, and `SURFACE_PRESSURE_ONLY`.
 
-`SURFACE_STANDALONE_MATCH=1` requires the diagnostic flag to be explicitly enabled. The comparison controls are disabled by default.
+`SURFACE_REFERENCE_PROFILE=1` requires the diagnostic flag to be explicitly enabled. The comparison controls are disabled by default.
 
 ## What is and is not matched
 

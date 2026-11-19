@@ -189,7 +189,7 @@ namespace femus {
 
     //coarse mesh
     _level0[0] = new Mesh();
-    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
     std::cout << " Reading corse mesh from file: " << mesh_file << std::endl;
     _level0[0]->ReadCoarseMesh(mesh_file, Lref, _finiteElementGeometryFlag);
@@ -201,7 +201,7 @@ namespace femus {
       MeshRefinement meshcoarser(*_level0[i - 1u]);
       meshcoarser.FlagAllElementsToBeRefined();
       _level0[i] = new Mesh();
-      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
       MeshRefinement meshfiner(*_level0[i]);
       meshfiner.RefineMesh(i, _level0[i - 1], _finiteElement);
@@ -225,7 +225,7 @@ namespace femus {
         meshcoarser.FlagElementsToBeRefined();
       }
       _level0[i] = new Mesh();
-      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
       MeshRefinement meshfiner(*_level0[i]);
       meshfiner.RefineMesh(i, _level0[i - 1], _finiteElement);
@@ -261,7 +261,7 @@ namespace femus {
 
     //coarse mesh
     _level0[0] = new Mesh();
-    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
     std::cout << " Reading corse mesh from file: " << mesh_file << std::endl;
     _level0[0]->ReadCoarseMesh(mesh_file, Lref, _finiteElementGeometryFlag, read_groups, read_boundary_groups);
@@ -287,7 +287,7 @@ namespace femus {
 
     //coarse mesh
     _level0[0] = new Mesh();
-    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
     std::cout << " Building brick mesh using the built-in mesh generator" << std::endl;
 
@@ -315,7 +315,7 @@ namespace femus {
       meshcoarser.FlagAllElementsToBeRefined();
 
       _level0[i] = new Mesh();
-      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
       MeshRefinement meshfiner(*_level0[i]);
       meshfiner.RefineMesh(i, _level0[i - 1], _finiteElement);
@@ -342,7 +342,7 @@ namespace femus {
         //meshcoarser.FlagOnlyEvenElementsToBeRefined();
       }
       _level0[i] = new Mesh();
-      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+      if(_metisSelectivePartitioning) _level0[i]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
       MeshRefinement meshfiner(*_level0[i]);
       meshfiner.RefineMesh(i, _level0[i - 1], _finiteElement);
@@ -372,7 +372,7 @@ namespace femus {
     mshc->EnforceOneLevelAMR(coarseLocalizedAmrVector, true);
 
     _level0[_gridn0] = new Mesh();
-    if(_metisSelectivePartitioning) _level0[_gridn0]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+    if(_metisSelectivePartitioning) _level0[_gridn0]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
     MeshRefinement meshfiner(*_level0[_gridn0]);
     meshfiner.RefineMesh(_gridn0, _level0[_gridn0 - 1u], _finiteElement);
@@ -457,7 +457,7 @@ namespace femus {
 
     _level0.resize(1);
     _level0[0] = new Mesh();
-    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevel);
+    if(_metisSelectivePartitioning) _level0[0]->EnableMetisLevelSelectivePartitioning(_metisLevelC, _metisLevelF);
 
     _level0[0]->BuildSingleElement(geometry, lo, hi);
     BuildElemType(GaussOrder);

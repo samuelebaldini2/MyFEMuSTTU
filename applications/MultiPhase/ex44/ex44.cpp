@@ -334,7 +334,7 @@ int main(int argc, char **argv) {
     for (const unsigned nSteps : nStepsList) {
 
       MultiLevelMesh mlMsh0;
-      if(enableMetisLevelPartitioning) mlMsh0.EnableMetisLevelSelectivePartitioning(levelC);
+      if(enableMetisLevelPartitioning) mlMsh0.EnableMetisLevelSelectivePartitioning(levelC, levelF);
       std::string meshName = (requestedDim == 3) ? /*"./input/cube_01_unstruct.neu"*/ "./input/cube_01_struct_tet10.neu" : "./input/unstructured_RB_tri_h8.neu";
       if (elementType == TET /*|| elementType == TRI*/) {
         mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", (requestedDim == 3) ? 0.1 : 1);
@@ -448,7 +448,7 @@ int main(int argc, char **argv) {
       std::vector<std::string> variablesToBePrinted = {"All"};
 
       MultiLevelMesh mlMsh1;
-      if(enableMetisLevelPartitioning) mlMsh1.EnableMetisLevelSelectivePartitioning(levelC);
+      if(enableMetisLevelPartitioning) mlMsh1.EnableMetisLevelSelectivePartitioning(levelC, levelF);
       MultiLevelSolution mlSol1;
 
       MultiLevelMesh *mlmsh0 = &mlMsh0;

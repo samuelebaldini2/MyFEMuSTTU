@@ -328,7 +328,7 @@ int main(int argc, char **argv) {
     for (const unsigned nSteps : nStepsList) {
 
       MultiLevelMesh mlMsh0;
-      if(enableMetisLevelPartitioning) mlMsh0.EnableMetisLevelSelectivePartitioning(levelC);
+      if(enableMetisLevelPartitioning) mlMsh0.EnableMetisLevelSelectivePartitioning(levelC, levelF);
       std::string meshName = (requestedDim == 2) ? "./input/unstructured_PC_coarse.neu" : "./input/unstructured_cube_hex27.neu";
 
       // if (simulation == SimulationCase::PAR) mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
@@ -437,7 +437,7 @@ int main(int argc, char **argv) {
       std::vector<std::string> variablesToBePrinted = {"All"};
 
       MultiLevelMesh mlMsh1;
-      if(enableMetisLevelPartitioning) mlMsh1.EnableMetisLevelSelectivePartitioning(levelC);
+      if(enableMetisLevelPartitioning) mlMsh1.EnableMetisLevelSelectivePartitioning(levelC, levelF);
       MultiLevelSolution mlSol1;
 
       MultiLevelMesh *mlmsh0 = &mlMsh0;
@@ -2305,10 +2305,10 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
         minCut = std::min(minCut, n);
         maxCut = std::max(maxCut, n);
 
-        std::cout << "Proc " << p
-                  << "  CutCells = " << cutsPerProc[p]
-                  << "  TotalCells = " << cellsPerProc[p]
-                  << "\n";
+        // std::cout << "Proc " << p
+        //           << "  CutCells = " << cutsPerProc[p]
+        //           << "  TotalCells = " << cellsPerProc[p]
+        //           << "\n";
       }
 
       double mean = total / nprocs;

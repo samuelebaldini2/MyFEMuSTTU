@@ -285,19 +285,22 @@ namespace femus {
         double curvature,
         const std::array<double, 3>& x);
 
-      void EnableMetisLevelSelectivePartitioning(const unsigned levelC) {
+      void EnableMetisLevelSelectivePartitioning(const unsigned levelC, const unsigned levelF) {
         _metisSelectivePartitioning = true;
-        _metisLevel = levelC;
+        _metisLevelC = levelC;
+        _metisLevelF = levelF;
       };
 
       void DisableMetisLevelSelectivePartitioning() {
         _metisSelectivePartitioning = false;
-        _metisLevel = 0;
+        _metisLevelC = 0;
+        _metisLevelF = 0;
       };
 
 
       bool GetMetisSelectivePartitioning(){return _metisSelectivePartitioning;}
-      unsigned GetMetisLevel(){return _metisLevel;}
+      unsigned GetMetisLevelC(){return _metisLevelC;}
+      unsigned GetMetisLevelF(){return _metisLevelF;}
 
     private:
       /** Coarser mesh from which this mesh is generated, it equals NULL if _level = 0 */
@@ -347,7 +350,8 @@ namespace femus {
       double _cLenght;
 
       bool _metisSelectivePartitioning = false;
-      unsigned _metisLevel = 0;
+      unsigned _metisLevelC = 0;
+      unsigned _metisLevelF = 0;
   };
 
 } //end namespace femus

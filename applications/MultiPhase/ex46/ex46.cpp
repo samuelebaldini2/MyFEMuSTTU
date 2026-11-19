@@ -323,9 +323,12 @@ int main(int argc, char **argv) {
     const unsigned levelC = levelF - levelOffset; //coarse level associated to mlmsh2, but existing also mlmsh0 and mlmsh1
     const unsigned level0 = 0;
 
+    bool enableMetisLevelPartitioning = true;
+
     for (const unsigned nSteps : nStepsList) {
 
       MultiLevelMesh mlMsh0;
+      if(enableMetisLevelPartitioning) mlMsh0.EnableMetisLevelSelectivePartitioning(levelC);
       std::string meshName = (requestedDim == 2) ? "./input/unstructured_PC_coarse.neu" : "./input/unstructured_cube_hex27.neu";
 
       // if (simulation == SimulationCase::PAR) mlMsh0.ReadCoarseMesh(meshName.c_str(), "seventh", scalingFactor);
@@ -434,6 +437,7 @@ int main(int argc, char **argv) {
       std::vector<std::string> variablesToBePrinted = {"All"};
 
       MultiLevelMesh mlMsh1;
+      if(enableMetisLevelPartitioning) mlMsh1.EnableMetisLevelSelectivePartitioning(levelC);
       MultiLevelSolution mlSol1;
 
       MultiLevelMesh *mlmsh0 = &mlMsh0;
@@ -1148,6 +1152,11 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
 
   int nprocs;
   MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+  int rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  unsigned long long localCutCells = 0;
+  unsigned long long localAssembledCells = 0;
 
   // if (nprocs == 1)
   //   ProfilerStart("profiling.prof");
@@ -1458,6 +1467,11 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
         unsigned nDofsK;
 
         unsigned cut = (fabs(C - 0.5) < 0.1 ) ? 1 : 0;
+        ++localAssembledCells;
+
+        if (cut == 1) {
+            ++localCutCells;
+        }
         const bool tangentialSurfaceWeights = cutFemIntegration == CutFemIntegration::Quadratic && !axisymmetric;
         // CutFemWeight_LS<TypeIO,TypeA>* elementSurfaceRule = cfwLS[ielGeom];
         auto* elementSurfaceRule = cfwLS[ielGeom];
@@ -2261,6 +2275,68 @@ void AssembleMultiphase(MultiLevelProblem& ml_prob2) {
   }
 
   //END parallel exchange between levels
+
+  if (levelToAssemble == levelC - level0 && firstNonlinearIt) {
+
+    std::vector<unsigned long long> cutsPerProc(nprocs);
+    std::vector<unsigned long long> cellsPerProc(nprocs);
+
+    MPI_Gather(&localCutCells, 1, MPI_UNSIGNED_LONG_LONG,
+              cutsPerProc.data(), 1, MPI_UNSIGNED_LONG_LONG,
+              0, MPI_COMM_WORLD);
+
+    MPI_Gather(&localAssembledCells, 1, MPI_UNSIGNED_LONG_LONG,
+              cellsPerProc.data(), 1, MPI_UNSIGNED_LONG_LONG,
+              0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+
+      double total = 0.0;
+      double minCut = static_cast<double>(cutsPerProc[0]);
+      double maxCut = 0.0;
+
+      std::cout << "\n===== CUT CELL DISTRIBUTION =====\n";
+
+      for (int p = 0; p < nprocs; ++p) {
+
+        double n = static_cast<double>(cutsPerProc[p]);
+
+        total += n;
+        minCut = std::min(minCut, n);
+        maxCut = std::max(maxCut, n);
+
+        std::cout << "Proc " << p
+                  << "  CutCells = " << cutsPerProc[p]
+                  << "  TotalCells = " << cellsPerProc[p]
+                  << "\n";
+      }
+
+      double mean = total / nprocs;
+      double variance = 0.0;
+
+      for (int p = 0; p < nprocs; ++p) {
+          double diff = static_cast<double>(cutsPerProc[p]) - mean;
+          variance += diff * diff;
+      }
+
+      variance /= nprocs;
+
+      double stddev = std::sqrt(variance);
+      double CV = (mean > 0.0) ? stddev / mean : 0.0;
+      double imbalance = (mean > 0.0) ? maxCut / mean : 0.0;
+      double efficiency = (maxCut > 0.0) ? mean / maxCut : 0.0;
+
+      std::cout << "\nTotal cut cells = " << total
+                << "\nMean           = " << mean
+                << "\nMin            = " << minCut
+                << "\nMax            = " << maxCut
+                << "\nStd deviation  = " << stddev
+                << "\nCV             = " << CV
+                << "\nImbalance      = " << imbalance
+                << "\nEfficiency (%) = " << efficiency * 100.0
+                << "\n===============================\n";
+    }
+  }
 
   RES->close();
   KK->close();

@@ -1,6 +1,8 @@
 #ifndef FEMUS_PREPARED_MOMENTS_HPP
 #define FEMUS_PREPARED_MOMENTS_HPP
 
+#include <cstdlib>
+
 #include "CutFemLevelSetData.hpp"
 #include "UnitElementMoments.hpp"
 #include "Hex27DirectionSelection.hpp"
@@ -194,6 +196,10 @@ inline void IntegrateSpatial(const CutFemLevelSetData& source, unsigned degree, 
   data.absoluteD = absolute*normalization*measure/amplification;
   data.relative = relative/amplification;
   std::vector<long double> moments, momentErrors;
+  if (std::getenv("FEMUS_CUTFEM_UNLIMITED")) {
+    data.maximumDepth = 48;
+    data.maximumEvaluations = 1000000000U;
+  }
   SurfaceEndpointIntegration::Integrate(data,source.GetGeometry() == TET,moments,momentErrors);
   if(validation == 2) SurfaceEndpointIntegration::Compare(data,source.GetGeometry() == TET,moments,momentErrors);
   if(barycentric) { std::vector<long double> original, originalErrors; EndpointSimplexChart::RestoreTetrahedron(degree,moments,momentErrors,original,originalErrors); moments.swap(original); momentErrors.swap(originalErrors); }

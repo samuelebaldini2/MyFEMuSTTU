@@ -20,7 +20,7 @@ NZ=8
 
 UNIFORM_LEVELS=(1)
 NSTEPS=(1000)                       # dt = 0.03 / NSTEPS; not actual solves
-SOLVE_STEPS=1000                       # actual NS steps, with fixed interface
+SOLVE_STEPS=1                       # actual NS steps, with fixed interface
 INITIAL_PRESSURE="young-laplace"   # young-laplace | zero
 
 # Keep uploaded ex46 defaults initially; vary one switch at a time.
@@ -29,13 +29,14 @@ VELOCITY_GP=1
 STABILIZATION=1
 
 SURFACE_MOMENT_ORDER=17
-SURFACE_MOMENT_TOL=1.e-8
+SURFACE_MOMENT_TOL=1.e-12
 SURFACE_WEIGHTS=1                   # 3D: three signed-normal moments
 SURFACE_GK2="7/15"
 SURFACE_GK2t="7/15"
 SURFACE_GK3="15/31"
 SURFACE_GK3t="15/31"
-SURFACE_PRESSURE_DIAGNOSTIC=0
+SURFACE_PRESSURE_DIAGNOSTIC=1
+SURFACE_EXTENDED_BUDGET=1
 
 MULTIGRID_TYPE="mg"               # mg | hmg
 EXECUTABLE="./MultiPhase_ex46_par"
@@ -109,6 +110,11 @@ if [[ "$SURFACE_PRESSURE_DIAGNOSTIC" == 1 ]]; then
 fi
 
 mkdir -p levelsetdiagnostic
+if [[ "$SURFACE_EXTENDED_BUDGET" == 1 ]]; then
+    export FEMUS_CUTFEM_UNLIMITED=1
+else
+    unset FEMUS_CUTFEM_UNLIMITED
+fi
 run=0
 for mesh in "${MESHES[@]}"; do
   [[ "$mesh" == generated || "$mesh" == imported ]] || {
